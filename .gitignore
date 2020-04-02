@@ -116,3 +116,16 @@ dmypy.json
 .pyre/
 
 .idea/
+
+# Gunicorn configure
+gunicorn.ini
+gunicorn.conf
+gunicorn.conf.py
+.gunicorn.conf.py
+
+# uwsgi configure
+uwsgi.ini
+uwsgi.conf
+.uwsgi.ini
+.uwsgi.conf
+
