@@ -1,37 +1,47 @@
 # coding:utf-8
-from django.shortcuts import render,redirect
-from django.http.response import JsonResponse,Http404,HttpResponseNotAllowed,HttpResponse
-from django.http import HttpResponseForbidden
-from django.contrib.auth.decorators import login_required # 登录需求装饰器
-from django.views.decorators.http import require_http_methods,require_GET,require_POST # 视图请求方法装饰器
-from django.core.paginator import Paginator,PageNotAnInteger,EmptyPage,InvalidPage # 后端分页
-from django.core.exceptions import PermissionDenied,ObjectDoesNotExist
-from app_doc.models import Project,Doc,DocTemp
-from django.contrib.auth.models import User
-from django.db.models import Q
 import datetime
-import traceback
-import re
-from app_doc.report_utils import *
-from app_admin.decorators import check_headers,allow_report_file
 import os.path
+import re
+import traceback
+
+from django.contrib.auth.decorators import login_required  # 登录需求装饰器
+from django.contrib.auth.models import User
+from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
+from django.core.paginator import (EmptyPage, InvalidPage,  # 后端分页
+                                   PageNotAnInteger, Paginator)
+from django.db.models import Q
+from django.http import HttpResponseForbidden
+from django.http.response import (Http404, HttpResponse,
+                                  HttpResponseNotAllowed, JsonResponse)
+from django.shortcuts import redirect, render
+from django.views.decorators.http import (require_GET,  # 视图请求方法装饰器
+                                          require_http_methods, require_POST)
+
+from app_admin.decorators import allow_report_file, check_headers
+from app_doc.models import Doc, DocTemp, Project
+from app_doc.report_utils import *
 
 # 替换前端传来的非法字符
+
+
 def validateTitle(title):
-  rstr = r"[\/\\\:\*\?\"\<\>\|]" # '/ \ : * ? " < > |'
-  new_title = re.sub(rstr, "_", title) # 替换为下划线
-  return new_title
+    rstr = r"[\/\\\:\*\?\"\<\>\|]"  # '/ \ : * ? " < > |'
+    new_title = re.sub(rstr, "_", title)  # 替换为下划线
+    return new_title
 
 # 文集列表
+
+
 def project_list(request):
     # 登录用户
     if request.user.is_authenticated:
         project_list = Project.objects.filter(
-            Q(role__in=[0,3]) | Q(role=2,role_value__contains=str(request.user.username)) | Q(create_user=request.user)
+            Q(role__in=[0, 3]) | Q(role=2, role_value__contains=str(
+                request.user.username)) | Q(create_user=request.user)
         )
     else:
         # 非登录用户只显示公开文集和需要访问码的文集
-        project_list = Project.objects.filter(role__in=[0,3])
+        project_list = Project.objects.filter(role__in=[0, 3])
     return render(request, 'app_doc/pro_list.html', locals())
 
 
@@ -40,34 +50,34 @@ def project_list(request):
 def create_project(request):
     if request.method == 'POST':
         try:
-            name = request.POST.get('pname','')
+            name = request.POST.get('pname', '')
             name = validateTitle(name)
-            desc = request.POST.get('desc','')
-            role = request.POST.get('role',0)
-            role_list = ['0','1','2','3',0,1,2,3]
+            desc = request.POST.get('desc', '')
+            role = request.POST.get('role', 0)
+            role_list = ['0', '1', '2', '3', 0, 1, 2, 3]
             if name != '':
                 project = Project.objects.create(
                     name=name,
                     intro=desc[:100],
                     create_user=request.user,
-                    role = int(role) if role in role_list else 0
+                    role=int(role) if role in role_list else 0
                 )
                 project.save()
-                return JsonResponse({'status':True,'data':{'id':project.id,'name':project.name}})
+                return JsonResponse({'status': True, 'data': {'id': project.id, 'name': project.name}})
             else:
-                return JsonResponse({'status':False,'data':'文集名称不能为空！'})
+                return JsonResponse({'status': False, 'data': '文集名称不能为空！'})
         except Exception as e:
             if settings.DEBUG:
                 print(traceback.print_exc())
-            return JsonResponse({'status':False,'data':'出现异常,请检查输入值！'})
+            return JsonResponse({'status': False, 'data': '出现异常,请检查输入值！'})
     else:
-        return JsonResponse({'status':False,'data':'请求方法不允许'})
+        return JsonResponse({'status': False, 'data': '请求方法不允许'})
 
 
 # 文集页
 @require_http_methods(['GET'])
 @check_headers
-def project_index(request,pro_id):
+def project_index(request, pro_id):
     # 获取文集
     try:
         # 获取文集信息
@@ -75,20 +85,21 @@ def project_index(request,pro_id):
 
         # 获取问价文集前台下载权限
         try:
-            allow_epub_download = ProjectReport.objects.get(project=project).allow_epub
+            allow_epub_download = ProjectReport.objects.get(
+                project=project).allow_epub
         except ObjectDoesNotExist:
             allow_epub_download = 0
 
         # 私密文集并且访问者非创建者
         if project.role == 1 and request.user != project.create_user:
-            return render(request,'404.html')
+            return render(request, '404.html')
         # 指定用户可见文集
         elif project.role == 2:
             user_list = project.role_value
-            if request.user.is_authenticated: # 认证用户判断是否在许可用户列表中
-                if request.user.username not in user_list and request.user != project.create_user: # 访问者不在指定用户之中
+            if request.user.is_authenticated:  # 认证用户判断是否在许可用户列表中
+                if request.user.username not in user_list and request.user != project.create_user:  # 访问者不在指定用户之中
                     return render(request, '404.html')
-            else:# 游客直接返回404
+            else:  # 游客直接返回404
                 return render(request, '404.html')
         # 访问码可见
         elif project.role == 3:
@@ -96,17 +107,20 @@ def project_index(request,pro_id):
             if request.user != project.create_user:
                 viewcode = project.role_value
                 viewcode_name = 'viewcode-{}'.format(project.id)
-                r_viewcode = request.COOKIES[viewcode_name] if viewcode_name in request.COOKIES.keys() else 0 # 从cookie中获取访问码
-                if viewcode != r_viewcode: # cookie中的访问码不等于文集访问码，跳转到访问码认证界面
+                r_viewcode = request.COOKIES[viewcode_name] if viewcode_name in request.COOKIES.keys(
+                ) else 0  # 从cookie中获取访问码
+                if viewcode != r_viewcode:  # cookie中的访问码不等于文集访问码，跳转到访问码认证界面
                     return redirect('/check_viewcode/?to={}'.format(request.path))
 
         # 获取搜索词
-        kw = request.GET.get('kw','')
+        kw = request.GET.get('kw', '')
         # 获取文集下所有一级文档
-        project_docs = Doc.objects.filter(top_doc=int(pro_id), parent_doc=0, status=1).order_by('sort')
+        project_docs = Doc.objects.filter(top_doc=int(
+            pro_id), parent_doc=0, status=1).order_by('sort')
         if kw != '':
-            search_result = Doc.objects.filter(top_doc=int(pro_id),pre_content__icontains=kw)
-            return render(request,'app_doc/project_doc_search.html',locals())
+            search_result = Doc.objects.filter(
+                top_doc=int(pro_id), pre_content__icontains=kw)
+            return render(request, 'app_doc/project_doc_search.html', locals())
         return render(request, 'app_doc/project.html', locals())
     except Exception as e:
         if settings.DEBUG:
@@ -119,54 +133,54 @@ def project_index(request,pro_id):
 def modify_project(request):
     if request.method == 'POST':
         try:
-            pro_id = request.POST.get('pro_id',None)
+            pro_id = request.POST.get('pro_id', None)
             project = Project.objects.get(id=pro_id)
             if (request.user == project.create_user) or request.user.is_superuser:
-                name = request.POST.get('name',None)
-                content = request.POST.get('desc',None)
+                name = request.POST.get('name', None)
+                content = request.POST.get('desc', None)
                 project.name = name
                 project.intro = content
                 project.save()
-                return JsonResponse({'status':True,'data':'修改成功'})
+                return JsonResponse({'status': True, 'data': '修改成功'})
             else:
-                return JsonResponse({'status':False,'data':'非法请求'})
+                return JsonResponse({'status': False, 'data': '非法请求'})
         except Exception as e:
             if settings.DEBUG:
                 print(traceback.print_exc())
-            return JsonResponse({'status':False,'data':'请求出错'})
+            return JsonResponse({'status': False, 'data': '请求出错'})
     else:
-        return JsonResponse({'status':False,'data':'方法不允许'})
+        return JsonResponse({'status': False, 'data': '方法不允许'})
 
 
 # 修改文集权限
 @login_required()
-def modify_project_role(request,pro_id):
+def modify_project_role(request, pro_id):
     try:
         pro = Project.objects.get(id=pro_id)
     except ObjectDoesNotExist:
         return Http404
     if (pro.create_user != request.user) and (request.user.is_superuser is False):
-        return render(request,'403.html')
+        return render(request, '403.html')
     else:
         if request.method == 'GET':
-            return render(request,'app_doc/manage_project_role.html',locals())
+            return render(request, 'app_doc/manage_project_role.html', locals())
         elif request.method == 'POST':
-            role_type = request.POST.get('role','')
+            role_type = request.POST.get('role', '')
             if role_type != '':
-                if int(role_type) in [0,1]:# 公开或私密
-                    Project.objects.filter(id=int(pro_id)).update(
-                        role = role_type,
-                        modify_time = datetime.datetime.now()
-                    )
-                if int(role_type) == 2: # 指定用户可见
-                    role_value = request.POST.get('tagsinput','')
+                if int(role_type) in [0, 1]:  # 公开或私密
                     Project.objects.filter(id=int(pro_id)).update(
                         role=role_type,
-                        role_value = role_value,
-                        modify_time = datetime.datetime.now()
+                        modify_time=datetime.datetime.now()
                     )
-                if int(role_type) == 3: # 访问码可见
-                    role_value = request.POST.get('viewcode','')
+                if int(role_type) == 2:  # 指定用户可见
+                    role_value = request.POST.get('tagsinput', '')
+                    Project.objects.filter(id=int(pro_id)).update(
+                        role=role_type,
+                        role_value=role_value,
+                        modify_time=datetime.datetime.now()
+                    )
+                if int(role_type) == 3:  # 访问码可见
+                    role_value = request.POST.get('viewcode', '')
                     Project.objects.filter(id=int(pro_id)).update(
                         role=role_type,
                         role_value=role_value,
@@ -179,20 +193,20 @@ def modify_project_role(request,pro_id):
 
 
 # 验证文集访问码
-@require_http_methods(['GET',"POST"])
+@require_http_methods(['GET', "POST"])
 def check_viewcode(request):
     try:
         if request.method == 'GET':
-            project_id = request.GET.get('to','').split("/")[1].split('-')[1]
+            project_id = request.GET.get('to', '').split("/")[1].split('-')[1]
             project = Project.objects.get(id=int(project_id))
-            return render(request,'app_doc/check_viewcode.html',locals())
+            return render(request, 'app_doc/check_viewcode.html', locals())
         else:
-            viewcode = request.POST.get('viewcode','')
-            project_id = request.POST.get('project_id','')
+            viewcode = request.POST.get('viewcode', '')
+            project_id = request.POST.get('project_id', '')
             project = Project.objects.get(id=int(project_id))
             if project.role == 3 and project.role_value == viewcode:
-                obj = redirect("pro_index",pro_id=project_id)
-                obj.set_cookie('viewcode-{}'.format(project_id),viewcode)
+                obj = redirect("pro_index", pro_id=project_id)
+                obj.set_cookie('viewcode-{}'.format(project_id), viewcode)
                 return obj
             else:
                 errormsg = "访问码错误"
@@ -200,14 +214,14 @@ def check_viewcode(request):
     except Exception as e:
         if settings.DEBUG:
             print(traceback.print_exc())
-        return render(request,'404.html')
+        return render(request, '404.html')
 
 
 # 删除文集
 @login_required()
 def del_project(request):
     try:
-        pro_id = request.POST.get('pro_id','')
+        pro_id = request.POST.get('pro_id', '')
         if pro_id != '':
             pro = Project.objects.get(id=pro_id)
             if (request.user == pro.create_user) or request.user.is_superuser:
@@ -216,15 +230,15 @@ def del_project(request):
                 pro_doc_list.delete()
                 # 删除文集
                 pro.delete()
-                return JsonResponse({'status':True})
+                return JsonResponse({'status': True})
             else:
-                return JsonResponse({'status':False,'data':'非法请求'})
+                return JsonResponse({'status': False, 'data': '非法请求'})
         else:
-            return JsonResponse({'status':False,'data':'参数错误'})
+            return JsonResponse({'status': False, 'data': '参数错误'})
     except Exception as e:
         if settings.DEBUG:
             print(traceback.print_exc())
-        return JsonResponse({'status':False,'data':'请求出错'})
+        return JsonResponse({'status': False, 'data': '请求出错'})
 
 
 # 管理文集
@@ -234,7 +248,8 @@ def manage_project(request):
         try:
             search_kw = request.GET.get('kw', None)
             if search_kw:
-                pro_list = Project.objects.filter(create_user=request.user,intro__icontains=search_kw)
+                pro_list = Project.objects.filter(
+                    create_user=request.user, intro__icontains=search_kw)
                 paginator = Paginator(pro_list, 10)
                 page = request.GET.get('page', 1)
                 try:
@@ -254,7 +269,7 @@ def manage_project(request):
                     pros = paginator.page(1)
                 except EmptyPage:
                     pros = paginator.page(paginator.num_pages)
-            return render(request,'app_doc/manage_project.html',locals())
+            return render(request, 'app_doc/manage_project.html', locals())
         except Exception as e:
             if settings.DEBUG:
                 print(traceback.print_exc())
@@ -265,32 +280,32 @@ def manage_project(request):
 
 # 修改文集前台下载权限
 @login_required()
-def modify_project_download(request,pro_id):
+def modify_project_download(request, pro_id):
     try:
         pro = Project.objects.get(id=pro_id)
     except ObjectDoesNotExist:
         return Http404
     if (pro.create_user != request.user) and (request.user.is_superuser is False):
-        return render(request,'403.html')
+        return render(request, '403.html')
     else:
         if request.method == 'GET':
-            return render(request,'app_doc/manage_project_download.html',locals())
+            return render(request, 'app_doc/manage_project_download.html', locals())
         elif request.method == 'POST':
-            download_epub = request.POST.get('download_epub',None)
+            download_epub = request.POST.get('download_epub', None)
             # print("epub状态:",download_epub)
             if download_epub == 'on':
                 epub_status = 1
             else:
                 epub_status = 0
             ProjectReport.objects.update_or_create(
-                project = pro,defaults={'allow_epub':epub_status}
+                project=pro, defaults={'allow_epub': epub_status}
             )
-            return render(request,'app_doc/manage_project_download.html',locals())
+            return render(request, 'app_doc/manage_project_download.html', locals())
 
 
 # 文档浏览页页
 @require_http_methods(['GET'])
-def doc(request,pro_id,doc_id):
+def doc(request, pro_id, doc_id):
     try:
         if pro_id != '' and doc_id != '':
             # 获取文集信息
@@ -320,14 +335,15 @@ def doc(request,pro_id,doc_id):
 
             # 获取文档内容
             try:
-                doc = Doc.objects.get(id=int(doc_id),status=1)
+                doc = Doc.objects.get(id=int(doc_id), status=1)
             except ObjectDoesNotExist:
                 if settings.DEBUG:
                     print(traceback.print_exc())
                 return render(request, '404.html')
             # 获取文集下一级文档
-            project_docs = Doc.objects.filter(top_doc=doc.top_doc, parent_doc=0, status=1).order_by('sort')
-            return render(request,'app_doc/doc.html',locals())
+            project_docs = Doc.objects.filter(
+                top_doc=doc.top_doc, parent_doc=0, status=1).order_by('sort')
+            return render(request, 'app_doc/doc.html', locals())
         else:
             return HttpResponse('参数错误')
     except Exception as e:
@@ -341,49 +357,50 @@ def doc(request,pro_id,doc_id):
 def create_doc(request):
     if request.method == 'GET':
         try:
-            pid = request.GET.get('pid',-999)
+            pid = request.GET.get('pid', -999)
             # doc_list = Doc.objects.filter(create_user=request.user)
             project_list = Project.objects.filter(create_user=request.user)
-            doctemp_list = DocTemp.objects.filter(create_user=request.user).values('id','name','create_time')
-            return render(request,'app_doc/create_doc.html',locals())
+            doctemp_list = DocTemp.objects.filter(
+                create_user=request.user).values('id', 'name', 'create_time')
+            return render(request, 'app_doc/create_doc.html', locals())
         except Exception as e:
             if settings.DEBUG:
                 print(traceback.print_exc())
             return HttpResponse('请求出错')
     elif request.method == 'POST':
         try:
-            project = request.POST.get('project','')
-            parent_doc = request.POST.get('parent_doc','')
-            doc_name = request.POST.get('doc_name','')
-            doc_content = request.POST.get('content','')
-            pre_content = request.POST.get('pre_content','')
-            sort = request.POST.get('sort','')
-            status = request.POST.get('status',1)
+            project = request.POST.get('project', '')
+            parent_doc = request.POST.get('parent_doc', '')
+            doc_name = request.POST.get('doc_name', '')
+            doc_content = request.POST.get('content', '')
+            pre_content = request.POST.get('pre_content', '')
+            sort = request.POST.get('sort', '')
+            status = request.POST.get('status', 1)
             if project != '' and doc_name != '' and project != '-1':
                 doc = Doc.objects.create(
                     name=doc_name,
-                    content = doc_content,
-                    pre_content= pre_content,
-                    parent_doc= int(parent_doc) if parent_doc != '' else 0,
-                    top_doc= int(project),
-                    sort = sort if sort != '' else 99,
+                    content=doc_content,
+                    pre_content=pre_content,
+                    parent_doc=int(parent_doc) if parent_doc != '' else 0,
+                    top_doc=int(project),
+                    sort=sort if sort != '' else 99,
                     create_user=request.user,
-                    status = status
+                    status=status
                 )
-                return JsonResponse({'status':True,'data':{'pro':project,'doc':doc.id}})
+                return JsonResponse({'status': True, 'data': {'pro': project, 'doc': doc.id}})
             else:
-                return JsonResponse({'status':False,'data':'参数错误'})
+                return JsonResponse({'status': False, 'data': '参数错误'})
         except Exception as e:
             if settings.DEBUG:
                 print(traceback.print_exc())
-            return JsonResponse({'status':False,'data':'请求出错'})
+            return JsonResponse({'status': False, 'data': '请求出错'})
     else:
-        return JsonResponse({'status':False,'data':'方法不允许'})
+        return JsonResponse({'status': False, 'data': '方法不允许'})
 
 
 # 修改文档
 @login_required()
-def modify_doc(request,doc_id):
+def modify_doc(request, doc_id):
     if request.method == 'GET':
         try:
             doc = Doc.objects.get(id=doc_id)
@@ -391,7 +408,7 @@ def modify_doc(request,doc_id):
                 project = Project.objects.get(id=doc.top_doc)
                 doc_list = Doc.objects.filter(top_doc=project.id)
                 doctemp_list = DocTemp.objects.filter(create_user=request.user)
-                return render(request,'app_doc/modify_doc.html',locals())
+                return render(request, 'app_doc/modify_doc.html', locals())
             else:
                 return HttpResponse("非法请求")
         except Exception as e:
@@ -400,14 +417,14 @@ def modify_doc(request,doc_id):
             return HttpResponse('请求出错')
     elif request.method == 'POST':
         try:
-            doc_id = request.POST.get('doc_id','') # 文档ID
-            project = request.POST.get('project', '') # 文集ID
-            parent_doc = request.POST.get('parent_doc', '') # 上级文档ID
-            doc_name = request.POST.get('doc_name', '') # 文档名称
-            doc_content = request.POST.get('content', '') # 文档内容
-            pre_content = request.POST.get('pre_content', '') # 文档Markdown格式内容
-            sort = request.POST.get('sort', '') # 文档排序
-            status = request.POST.get('status',1) # 文档状态
+            doc_id = request.POST.get('doc_id', '')  # 文档ID
+            project = request.POST.get('project', '')  # 文集ID
+            parent_doc = request.POST.get('parent_doc', '')  # 上级文档ID
+            doc_name = request.POST.get('doc_name', '')  # 文档名称
+            doc_content = request.POST.get('content', '')  # 文档内容
+            pre_content = request.POST.get('pre_content', '')  # 文档Markdown格式内容
+            sort = request.POST.get('sort', '')  # 文档排序
+            status = request.POST.get('status', 1)  # 文档状态
             if doc_id != '' and project != '' and doc_name != '' and project != '-1':
                 # 更新文档内容
                 Doc.objects.filter(id=int(doc_id)).update(
@@ -416,16 +433,16 @@ def modify_doc(request,doc_id):
                     pre_content=pre_content,
                     parent_doc=int(parent_doc) if parent_doc != '' else 0,
                     sort=sort if sort != '' else 99,
-                    modify_time = datetime.datetime.now(),
-                    status = status
+                    modify_time=datetime.datetime.now(),
+                    status=status
                 )
-                return JsonResponse({'status': True,'data':'修改成功'})
+                return JsonResponse({'status': True, 'data': '修改成功'})
             else:
-                return JsonResponse({'status': False,'data':'参数错误'})
+                return JsonResponse({'status': False, 'data': '参数错误'})
         except Exception as e:
             if settings.DEBUG:
                 print(traceback.print_exc())
-            return JsonResponse({'status':False,'data':'请求出错'})
+            return JsonResponse({'status': False, 'data': '请求出错'})
 
 
 # 删除文档
@@ -433,7 +450,7 @@ def modify_doc(request,doc_id):
 def del_doc(request):
     try:
         # 获取文档ID
-        doc_id = request.POST.get('doc_id',None)
+        doc_id = request.POST.get('doc_id', None)
         if doc_id:
             # 查询文档
             try:
@@ -449,11 +466,11 @@ def del_doc(request):
             else:
                 return JsonResponse({'status': False, 'data': '非法请求'})
         else:
-            return JsonResponse({'status':False,'data':'参数错误'})
+            return JsonResponse({'status': False, 'data': '参数错误'})
     except Exception as e:
         if settings.DEBUG:
             print(traceback.print_exc())
-        return JsonResponse({'status':False,'data':'请求出错'})
+        return JsonResponse({'status': False, 'data': '请求出错'})
 
 
 # 管理文档
@@ -461,7 +478,7 @@ def del_doc(request):
 def manage_doc(request):
     if request.method == 'GET':
         # 文档内容搜索参数
-        search_kw = request.GET.get('kw',None)
+        search_kw = request.GET.get('kw', None)
         if search_kw:
             # 已发布文档数量
             published_doc_cnt = Doc.objects.filter(
@@ -486,13 +503,13 @@ def manage_doc(request):
                 doc_list = Doc.objects.filter(
                     create_user=request.user,
                     content__icontains=search_kw,
-                    status = 1
+                    status=1
                 ).order_by('-modify_time')
             elif doc_status == 'draft':
                 doc_list = Doc.objects.filter(
                     create_user=request.user,
                     content__icontains=search_kw,
-                    status = 0
+                    status=0
                 ).order_by('-modify_time')
             # 分页处理
             paginator = Paginator(doc_list, 10)
@@ -508,26 +525,27 @@ def manage_doc(request):
         else:
             # 已发布文档数量
             published_doc_cnt = Doc.objects.filter(
-                create_user=request.user,status=1
+                create_user=request.user, status=1
             ).count()
             # 草稿文档数量
             draft_doc_cnt = Doc.objects.filter(
-                create_user=request.user,status=0
+                create_user=request.user, status=0
             ).count()
             # 所有文档数量
             all_cnt = published_doc_cnt + draft_doc_cnt
             # 获取文档状态筛选参数
-            doc_status = request.GET.get('status','all')
+            doc_status = request.GET.get('status', 'all')
             if len(doc_status) == 0:
                 doc_status = 'all'
             # print('status:', doc_status,type(doc_status))
             # 返回所有文档
             if doc_status == 'all':
-                doc_list = Doc.objects.filter(create_user=request.user).order_by('-modify_time')
+                doc_list = Doc.objects.filter(
+                    create_user=request.user).order_by('-modify_time')
             # 返回已发布文档
             elif doc_status == 'published':
                 doc_list = Doc.objects.filter(
-                    create_user=request.user,status=1
+                    create_user=request.user, status=1
                 ).order_by('-modify_time')
             # 返回草稿文档
             elif doc_status == 'draft':
@@ -535,7 +553,8 @@ def manage_doc(request):
                     create_user=request.user, status=0
                 ).order_by('-modify_time')
             else:
-                doc_list = Doc.objects.filter(create_user=request.user).order_by('-modify_time')
+                doc_list = Doc.objects.filter(
+                    create_user=request.user).order_by('-modify_time')
             # 分页处理
             paginator = Paginator(doc_list, 10)
             page = request.GET.get('page', 1)
@@ -546,7 +565,7 @@ def manage_doc(request):
             except EmptyPage:
                 docs = paginator.page(paginator.num_pages)
             docs.status = doc_status
-        return render(request,'app_doc/manage_doc.html',locals())
+        return render(request, 'app_doc/manage_doc.html', locals())
     else:
         return HttpResponse('方法不允许')
 
@@ -555,37 +574,37 @@ def manage_doc(request):
 @login_required()
 def create_doctemp(request):
     if request.method == 'GET':
-        return render(request,'app_doc/create_doctemp.html',locals())
+        return render(request, 'app_doc/create_doctemp.html', locals())
     elif request.method == 'POST':
         try:
-            name = request.POST.get('name','')
-            content = request.POST.get('content','')
+            name = request.POST.get('name', '')
+            content = request.POST.get('content', '')
             if name != '':
                 doctemp = DocTemp.objects.create(
-                    name = name,
-                    content = content,
+                    name=name,
+                    content=content,
                     create_user=request.user
                 )
                 doctemp.save()
-                return JsonResponse({'status':True,'data':'创建成功'})
+                return JsonResponse({'status': True, 'data': '创建成功'})
             else:
-                return JsonResponse({'status':False,'data':'模板标题不能为空'})
+                return JsonResponse({'status': False, 'data': '模板标题不能为空'})
         except Exception as e:
             if settings.DEBUG:
                 print(traceback.print_exc())
-            return JsonResponse({'status':False,'data':'请求出错'})
+            return JsonResponse({'status': False, 'data': '请求出错'})
     else:
-        return JsonResponse({'status':False,'data':'方法不允许'})
+        return JsonResponse({'status': False, 'data': '方法不允许'})
 
 
 # 修改文档模板
 @login_required()
-def modify_doctemp(request,doctemp_id):
+def modify_doctemp(request, doctemp_id):
     if request.method == 'GET':
         try:
             doctemp = DocTemp.objects.get(id=doctemp_id)
             if request.user.id == doctemp.create_user.id:
-                return render(request,'app_doc/modify_doctemp.html',locals())
+                return render(request, 'app_doc/modify_doctemp.html', locals())
             else:
                 return HttpResponse('非法请求')
         except Exception as e:
@@ -594,24 +613,24 @@ def modify_doctemp(request,doctemp_id):
             return HttpResponse('请求出错')
     elif request.method == 'POST':
         try:
-            doctemp_id = request.POST.get('doctemp_id','')
-            name = request.POST.get('name','')
-            content = request.POST.get('content','')
-            if doctemp_id != '' and name !='':
+            doctemp_id = request.POST.get('doctemp_id', '')
+            name = request.POST.get('name', '')
+            content = request.POST.get('content', '')
+            if doctemp_id != '' and name != '':
                 doctemp = DocTemp.objects.get(id=doctemp_id)
                 if request.user.id == doctemp.create_user.id:
                     doctemp.name = name
                     doctemp.content = content
                     doctemp.save()
-                    return JsonResponse({'status':True,'data':'修改成功'})
+                    return JsonResponse({'status': True, 'data': '修改成功'})
                 else:
-                    return JsonResponse({'status':False,'data':'非法操作'})
+                    return JsonResponse({'status': False, 'data': '非法操作'})
             else:
-                return JsonResponse({'status':False,'data':'参数错误'})
+                return JsonResponse({'status': False, 'data': '参数错误'})
         except Exception as e:
             if settings.DEBUG:
                 print(traceback.print_exc())
-            return JsonResponse({'status':False,'data':'请求出错'})
+            return JsonResponse({'status': False, 'data': '请求出错'})
     else:
         return HttpResponse('方法不允许')
 
@@ -620,20 +639,20 @@ def modify_doctemp(request,doctemp_id):
 @login_required()
 def del_doctemp(request):
     try:
-        doctemp_id = request.POST.get('doctemp_id','')
+        doctemp_id = request.POST.get('doctemp_id', '')
         if doctemp_id != '':
             doctemp = DocTemp.objects.get(id=doctemp_id)
             if request.user.id == doctemp.create_user.id:
                 doctemp.delete()
-                return JsonResponse({'status':True,'data':'删除完成'})
+                return JsonResponse({'status': True, 'data': '删除完成'})
             else:
-                return JsonResponse({'status':False,'data':'非法请求'})
+                return JsonResponse({'status': False, 'data': '非法请求'})
         else:
             return JsonResponse({'status': False, 'data': '参数错误'})
     except Exception as e:
         if settings.DEBUG:
             print(traceback.print_exc())
-        return JsonResponse({'status':False,'data':'请求出错'})
+        return JsonResponse({'status': False, 'data': '请求出错'})
 
 
 # 管理文档模板
@@ -643,7 +662,8 @@ def manage_doctemp(request):
         try:
             search_kw = request.GET.get('kw', None)
             if search_kw:
-                doctemp_list = DocTemp.objects.filter(create_user=request.user,content__icontains=search_kw)
+                doctemp_list = DocTemp.objects.filter(
+                    create_user=request.user, content__icontains=search_kw)
                 paginator = Paginator(doctemp_list, 10)
                 page = request.GET.get('page', 1)
                 try:
@@ -677,27 +697,29 @@ def manage_doctemp(request):
 def get_doctemp(request):
     if request.method == 'POST':
         try:
-            doctemp_id = request.POST.get('doctemp_id','')
+            doctemp_id = request.POST.get('doctemp_id', '')
             if doctemp_id != '':
-                content = DocTemp.objects.get(id=int(doctemp_id)).serializable_value('content')
-                return JsonResponse({'status':True,'data':content})
+                content = DocTemp.objects.get(
+                    id=int(doctemp_id)).serializable_value('content')
+                return JsonResponse({'status': True, 'data': content})
             else:
-                return JsonResponse({'status':False,'data':'参数错误'})
+                return JsonResponse({'status': False, 'data': '参数错误'})
         except Exception as e:
             if settings.DEBUG:
                 print(traceback.print_exc())
-            return JsonResponse({'status':False,'data':'请求出错'})
+            return JsonResponse({'status': False, 'data': '请求出错'})
     else:
-        return JsonResponse({'status':False,'data':'方法错误'})
+        return JsonResponse({'status': False, 'data': '方法错误'})
 
 
 # 获取指定文集的所有文档
 def get_pro_doc(request):
     if request.method == 'POST':
-        pro_id = request.POST.get('pro_id','')
+        pro_id = request.POST.get('pro_id', '')
         if pro_id != '':
             # 获取文集所有文档的id、name和parent_doc3个字段
-            doc_list = Doc.objects.filter(top_doc=int(pro_id)).values_list('id','name','parent_doc').order_by('parent_doc')
+            doc_list = Doc.objects.filter(top_doc=int(pro_id)).values_list(
+                'id', 'name', 'parent_doc').order_by('parent_doc')
             item_list = []
             # 遍历文档
             for doc in doc_list:
@@ -705,7 +727,7 @@ def get_pro_doc(request):
                 if doc[2] == 0:
                     # 将其数据添加到列表中
                     item = [
-                        doc[0],doc[1],doc[2],''
+                        doc[0], doc[1], doc[2], ''
                     ]
                     item_list.append(item)
                 # 如果文档不是顶级文档
@@ -714,30 +736,30 @@ def get_pro_doc(request):
                     try:
                         parent = Doc.objects.get(id=doc[2])
                     except ObjectDoesNotExist:
-                        return JsonResponse({'status':False,'data':'文档id不存在'})
+                        return JsonResponse({'status': False, 'data': '文档id不存在'})
                     # 如果文档上级文档的上级是顶级文档，那么将其添加到列表
-                    if parent.parent_doc == 0: # 只要二级目录
+                    if parent.parent_doc == 0:  # 只要二级目录
                         item = [
-                            doc[0],doc[1],doc[2],parent.name+' --> '
+                            doc[0], doc[1], doc[2], parent.name+' --> '
                         ]
                         item_list.append(item)
-            return JsonResponse({'status':True,'data':list(item_list)})
+            return JsonResponse({'status': True, 'data': list(item_list)})
         else:
-            return JsonResponse({'status':False,'data':'参数错误'})
+            return JsonResponse({'status': False, 'data': '参数错误'})
     else:
-        return JsonResponse({'status':False,'data':'方法错误'})
+        return JsonResponse({'status': False, 'data': '方法错误'})
 
 
 # 404页面
 def handle_404(request):
-    return render(request,'404.html')
+    return render(request, '404.html')
 
 
 # 导出文集MD文件
 @login_required()
 def report_md(request):
     if request.method == 'POST':
-        pro_id = request.POST.get('project_id','')
+        pro_id = request.POST.get('project_id', '')
         user = request.user
         try:
             project = Project.objects.get(id=int(pro_id))
@@ -745,16 +767,16 @@ def report_md(request):
                 project_md = ReportMD(
                     project_id=int(pro_id)
                 )
-                md_file_path = project_md.work() # 生成并获取MD文件压缩包绝对路径
-                md_file_filename = os.path.split(md_file_path)[-1] # 提取文件名
-                md_file = "/media/reportmd_temp/"+ md_file_filename # 拼接相对链接
-                return JsonResponse({'status':True,'data':md_file})
+                md_file_path = project_md.work()  # 生成并获取MD文件压缩包绝对路径
+                md_file_filename = os.path.split(md_file_path)[-1]  # 提取文件名
+                md_file = "/media/reportmd_temp/" + md_file_filename  # 拼接相对链接
+                return JsonResponse({'status': True, 'data': md_file})
             else:
-                return JsonResponse({'status':False,'data':'无权限'})
+                return JsonResponse({'status': False, 'data': '无权限'})
         except Exception as e:
             if settings.DEBUG:
                 print(traceback.print_exc())
-            return JsonResponse({'status':False,'data':'文集不存在'})
+            return JsonResponse({'status': False, 'data': '文集不存在'})
 
     else:
         return Http404
@@ -763,7 +785,7 @@ def report_md(request):
 @allow_report_file
 def report_file(request):
     if request.method == 'POST':
-        report_type = request.POST.get('types',None)
+        report_type = request.POST.get('types', None)
         if report_type in ['epub']:
             pro_id = request.POST.get('pro_id')
             try:
@@ -774,9 +796,10 @@ def report_file(request):
                         project_id=project.id
                     ).work()
                     # print(report_project)
-                    report_file_path = report_project.split('media',maxsplit=1)[-1]
+                    report_file_path = report_project.split(
+                        'media', maxsplit=1)[-1]
                     epub_file = '/media' + report_file_path + '.epub'
-                    return JsonResponse({'status':True,'data':epub_file})
+                    return JsonResponse({'status': True, 'data': epub_file})
                 # 私密文集 - 拥有者可导出
                 elif project.role == 1:
                     pass
@@ -787,15 +810,15 @@ def report_file(request):
                 elif project.role == 3:
                     pass
                 else:
-                    return JsonResponse({'status':False,'data':'不存在的文集权限'})
+                    return JsonResponse({'status': False, 'data': '不存在的文集权限'})
             except ObjectDoesNotExist:
-                return JsonResponse({'status':False,'data':'文集不存在'})
+                return JsonResponse({'status': False, 'data': '文集不存在'})
             except Exception as e:
                 if settings.DEBUG:
                     print(traceback.print_exc())
-                return JsonResponse({'status':False,'data':'系统异常'})
+                return JsonResponse({'status': False, 'data': '系统异常'})
         else:
-            return JsonResponse({'status':False,'data':'不支持的类型'})
+            return JsonResponse({'status': False, 'data': '不支持的类型'})
     else:
         return Http404
 
@@ -806,16 +829,19 @@ def manage_image(request):
     # 获取图片
     if request.method == 'GET':
         try:
-            groups = ImageGroup.objects.filter(user=request.user) # 获取所有分组
+            groups = ImageGroup.objects.filter(user=request.user)  # 获取所有分组
             all_img_cnt = Image.objects.filter(user=request.user).count()
-            no_group_cnt = Image.objects.filter(user=request.user,group_id=None).count() # 获取所有未分组的图片数量
+            no_group_cnt = Image.objects.filter(
+                user=request.user, group_id=None).count()  # 获取所有未分组的图片数量
             g_id = int(request.GET.get('group', 0))  # 图片分组id
             if int(g_id) == 0:
                 image_list = Image.objects.filter(user=request.user)  # 查询所有图片
             elif int(g_id) == -1:
-                image_list = Image.objects.filter(user=request.user,group_id=None)  # 查询指定分组的图片
+                image_list = Image.objects.filter(
+                    user=request.user, group_id=None)  # 查询指定分组的图片
             else:
-                image_list = Image.objects.filter(user=request.user,group_id=g_id)  # 查询指定分组的图片
+                image_list = Image.objects.filter(
+                    user=request.user, group_id=g_id)  # 查询指定分组的图片
             paginator = Paginator(image_list, 20)
             page = request.GET.get('page', 1)
             try:
@@ -825,15 +851,15 @@ def manage_image(request):
             except EmptyPage:
                 images = paginator.page(paginator.num_pages)
             images.group = g_id
-            return render(request,'app_doc/manage_image.html',locals())
+            return render(request, 'app_doc/manage_image.html', locals())
         except:
             if settings.DEBUG:
                 print(traceback.print_exc())
-            return render(request,'404.html')
+            return render(request, '404.html')
     elif request.method == 'POST':
         try:
-            img_id = request.POST.get('img_id','')
-            types = request.POST.get('types','') # 操作类型：0表示删除，1表示修改，2表示获取
+            img_id = request.POST.get('img_id', '')
+            types = request.POST.get('types', '')  # 操作类型：0表示删除，1表示修改，2表示获取
             # 删除图片
             if int(types) == 0:
                 img = Image.objects.get(id=img_id)
@@ -843,106 +869,115 @@ def manage_image(request):
                 is_exist = os.path.exists(file_path)
                 if is_exist:
                     os.remove(file_path)
-                img.delete() # 删除记录
-                return JsonResponse({'status':True,'data':'删除完成'})
+                img.delete()  # 删除记录
+                return JsonResponse({'status': True, 'data': '删除完成'})
             # 移动图片分组
             elif int(types) == 1:
-                group_id = request.POST.get('group_id',None)
+                group_id = request.POST.get('group_id', None)
                 if group_id is None:
                     Image.objects.filter(id=img_id).update(group_id=None)
                 else:
-                    group = ImageGroup.objects.get(id=group_id,user=request.user)
+                    group = ImageGroup.objects.get(
+                        id=group_id, user=request.user)
                     Image.objects.filter(id=img_id).update(group_id=group)
-                return JsonResponse({'status':True,'data':'移动完成'})
+                return JsonResponse({'status': True, 'data': '移动完成'})
             # 获取图片
             elif int(types) == 2:
-                group_id = request.POST.get('group_id', None) # 接受分组ID参数
-                if group_id is None: #
-                    return JsonResponse({'status':False,'data':'参数错误'})
+                group_id = request.POST.get('group_id', None)  # 接受分组ID参数
+                if group_id is None:
+                    return JsonResponse({'status': False, 'data': '参数错误'})
                 elif int(group_id) == 0:
                     imgs = Image.objects.filter(user=request.user)
                 elif int(group_id) == -1:
-                    imgs = Image.objects.filter(user=request.user,group_id=None)
+                    imgs = Image.objects.filter(
+                        user=request.user, group_id=None)
                 else:
-                    imgs = Image.objects.filter(user=request.user,group_id=group_id)
+                    imgs = Image.objects.filter(
+                        user=request.user, group_id=group_id)
                 img_list = []
                 for img in imgs:
                     item = {
-                        'path':img.file_path,
-                        'name':img.file_name,
+                        'path': img.file_path,
+                        'name': img.file_name,
                     }
                     img_list.append(item)
-                return JsonResponse({'status':True,'data':img_list})
+                return JsonResponse({'status': True, 'data': img_list})
             else:
-                return JsonResponse({'status':False,'data':'非法参数'})
+                return JsonResponse({'status': False, 'data': '非法参数'})
         except ObjectDoesNotExist:
-            return JsonResponse({'status':False,'data':'图片不存在'})
+            return JsonResponse({'status': False, 'data': '图片不存在'})
         except:
             if settings.DEBUG:
                 print(traceback.print_exc())
-            return JsonResponse({'status':False,'data':'程序异常'})
+            return JsonResponse({'status': False, 'data': '程序异常'})
 
 # 图片分组管理
 @login_required()
 def manage_img_group(request):
     if request.method == 'GET':
         groups = ImageGroup.objects.filter(user=request.user)
-        return render(request,'app_doc/manage_image_group.html',locals())
+        return render(request, 'app_doc/manage_image_group.html', locals())
     # 操作分组
     elif request.method == 'POST':
-        types = request.POST.get('types',None) # 请求类型，0表示创建分组，1表示修改分组，2表示删除分组，3表示获取分组
+        # 请求类型，0表示创建分组，1表示修改分组，2表示删除分组，3表示获取分组
+        types = request.POST.get('types', None)
         # 创建分组
         if int(types) == 0:
             group_name = request.POST.get('group_name', '')
-            if group_name not in ['','默认分组','未分组']:
+            if group_name not in ['', '默认分组', '未分组']:
                 ImageGroup.objects.create(
-                    user = request.user,
-                    group_name = group_name
+                    user=request.user,
+                    group_name=group_name
                 )
-                return JsonResponse({'status':True,'data':'ok'})
+                return JsonResponse({'status': True, 'data': 'ok'})
             else:
-                return JsonResponse({'status':False,'data':'名称无效'})
+                return JsonResponse({'status': False, 'data': '名称无效'})
         # 修改分组
         elif int(types) == 1:
-            group_name = request.POST.get("group_name",'')
-            if group_name not in ['','默认分组','未分组']:
+            group_name = request.POST.get("group_name", '')
+            if group_name not in ['', '默认分组', '未分组']:
                 group_id = request.POST.get('group_id', '')
-                ImageGroup.objects.filter(id=group_id).update(group_name=group_name)
-                return JsonResponse({'status':True,'data':'修改成功'})
+                ImageGroup.objects.filter(
+                    id=group_id).update(group_name=group_name)
+                return JsonResponse({'status': True, 'data': '修改成功'})
             else:
-                return JsonResponse({'status':False,'data':'名称无效'})
+                return JsonResponse({'status': False, 'data': '名称无效'})
 
         # 删除分组
         elif int(types) == 2:
             try:
-                group_id = request.POST.get('group_id','')
-                group = ImageGroup.objects.get(id=group_id,user=request.user) # 查询分组
-                images = Image.objects.filter(group_id=group_id).update(group_id=None) # 移动图片到未分组
-                group.delete() # 删除分组
-                return JsonResponse({'status':True,'data':'删除完成'})
+                group_id = request.POST.get('group_id', '')
+                group = ImageGroup.objects.get(
+                    id=group_id, user=request.user)  # 查询分组
+                images = Image.objects.filter(
+                    group_id=group_id).update(group_id=None)  # 移动图片到未分组
+                group.delete()  # 删除分组
+                return JsonResponse({'status': True, 'data': '删除完成'})
             except:
                 if settings.DEBUG:
                     print(traceback.print_exc())
-                return JsonResponse({'status':False,'data':'删除错误'})
+                return JsonResponse({'status': False, 'data': '删除错误'})
         # 获取分组
         elif int(types) == 3:
             try:
                 group_list = []
                 all_cnt = Image.objects.all().count()
                 non_group_cnt = Image.objects.filter(group_id=None).count()
-                group_list.append({'group_name':'全部图片','group_cnt':all_cnt,'group_id':0})
-                group_list.append({'group_name':'未分组','group_cnt':non_group_cnt,'group_id':-1})
-                groups = ImageGroup.objects.filter(user=request.user) # 查询所有分组
+                group_list.append(
+                    {'group_name': '全部图片', 'group_cnt': all_cnt, 'group_id': 0})
+                group_list.append(
+                    {'group_name': '未分组', 'group_cnt': non_group_cnt, 'group_id': -1})
+                groups = ImageGroup.objects.filter(user=request.user)  # 查询所有分组
                 for group in groups:
                     group_cnt = Image.objects.filter(group_id=group).count()
                     item = {
-                        'group_id':group.id,
-                        'group_name':group.group_name,
-                        'group_cnt':group_cnt
+                        'group_id': group.id,
+                        'group_name': group.group_name,
+                        'group_cnt': group_cnt
                     }
                     group_list.append(item)
-                return JsonResponse({'status':True,'data':group_list})
+                return JsonResponse({'status': True, 'data': group_list})
             except:
                 if settings.DEBUG:
                     print(traceback.print_exc())
-                return JsonResponse({'status':False,'data':'出现错误'})
+                return JsonResponse({'status': False, 'data': '出现错误'})

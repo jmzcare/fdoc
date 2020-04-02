@@ -1,14 +1,15 @@
 # coding:utf-8
 # 文档自定义模板过滤器
-from app_doc.models import *
 from django import template
+
+from app_doc.models import *
 
 register = template.Library()
 
 # 获取文档的子文档
 @register.filter(name='get_next_doc')
 def get_next_doc(value):
-    return Doc.objects.filter(parent_doc=value,status=1).order_by('sort')
+    return Doc.objects.filter(parent_doc=value, status=1).order_by('sort')
 
 # 获取文档的所属文集
 @register.filter(name='get_doc_top')
@@ -29,18 +30,22 @@ def get_doc_next(value):
     try:
         doc_id = value
         doc = Doc.objects.get(id=int(doc_id))  # 当前文档
-        docs = Doc.objects.filter(parent_doc=doc.parent_doc, top_doc=doc.top_doc, status=1).order_by('sort')  # 同级所有文档
+        docs = Doc.objects.filter(
+            parent_doc=doc.parent_doc, top_doc=doc.top_doc, status=1).order_by('sort')  # 同级所有文档
         docs_list = [d.id for d in docs]
 
-        subdoc = Doc.objects.filter(parent_doc=doc.id,top_doc=doc.top_doc, status=1)  # 获取当前文档的所有子级文档
+        subdoc = Doc.objects.filter(
+            parent_doc=doc.id, top_doc=doc.top_doc, status=1)  # 获取当前文档的所有子级文档
 
         # 没有下级文档
         if subdoc.count() == 0:
             # 如果文档为同级最后一个文档，则没有下一篇文档
             if docs_list.index(doc.id) == len(docs_list) - 1:
                 try:
-                    parentdoc = Doc.objects.get(id=doc.parent_doc)  # 获取当前文档的上级文档
-                    parents = Doc.objects.filter(parent_doc=parentdoc.parent_doc, top_doc=doc.top_doc, status=1).order_by('sort')  # 获取上级文档的所有同级文档
+                    parentdoc = Doc.objects.get(
+                        id=doc.parent_doc)  # 获取当前文档的上级文档
+                    parents = Doc.objects.filter(
+                        parent_doc=parentdoc.parent_doc, top_doc=doc.top_doc, status=1).order_by('sort')  # 获取上级文档的所有同级文档
                     parent_list = [d.id for d in parents]
                 except:
                     return None
@@ -48,7 +53,8 @@ def get_doc_next(value):
                     # 获取上级文档的上一级文档
                     try:
                         parentdoc2 = Doc.objects.get(id=parentdoc.parent_doc)
-                        parents2 = Doc.objects.filter(parent_doc = parentdoc2.parent_doc,top_doc=parentdoc.top_doc,status=1).order_by('sort')
+                        parents2 = Doc.objects.filter(
+                            parent_doc=parentdoc2.parent_doc, top_doc=parentdoc.top_doc, status=1).order_by('sort')
                         parent_list2 = [d.id for d in parents2]
                     except:
                         return None
@@ -56,7 +62,8 @@ def get_doc_next(value):
                         next_doc = None
                         return next_doc
                     else:
-                        next_id = parent_list2[parent_list2.index(parentdoc2.id) + 1]
+                        next_id = parent_list2[parent_list2.index(
+                            parentdoc2.id) + 1]
                         return next_id
                 else:
                     next_id = parent_list[parent_list.index(parentdoc.id) + 1]
@@ -82,7 +89,8 @@ def get_doc_previous(value):
     try:
         doc_id = value
         doc = Doc.objects.get(id=int(doc_id))  # 当前文档
-        docs = Doc.objects.filter(parent_doc=doc.parent_doc,top_doc=doc.top_doc,status=1).order_by('sort')  # 同级所有文档
+        docs = Doc.objects.filter(
+            parent_doc=doc.parent_doc, top_doc=doc.top_doc, status=1).order_by('sort')  # 同级所有文档
         docs_list = [d.id for d in docs]
         # 文档为同级中的第一个，
         if docs_list.index(doc.id) == 0:
@@ -98,16 +106,18 @@ def get_doc_previous(value):
                 return previous.id
         # 文档为同级中的非第一个，那么上一篇为索引号的前一个文档
         else:
-            previou_id = docs_list[docs_list.index(doc.id) - 1] # 获取前一个文档的ID
-            previous = Doc.objects.get(id=previou_id) # 获取前一个文档
+            previou_id = docs_list[docs_list.index(doc.id) - 1]  # 获取前一个文档的ID
+            previous = Doc.objects.get(id=previou_id)  # 获取前一个文档
             # 查询以此文档为上级的文档
-            previous_subdoc = Doc.objects.filter(parent_doc=previous.id,top_doc=doc.top_doc,status=1).order_by('-sort')
+            previous_subdoc = Doc.objects.filter(
+                parent_doc=previous.id, top_doc=doc.top_doc, status=1).order_by('-sort')
             # 如果没有文档以此文档为上级文档，那么为上一篇文档
             if previous_subdoc.count() == 0:
                 return previou_id
-            else:# 否则，上一篇文档为以此文档作为上级文档的文档里面的最后一篇文档
+            else:  # 否则，上一篇文档为以此文档作为上级文档的文档里面的最后一篇文档
                 previous = previous_subdoc[:1][0]
-                parent_list = Doc.objects.filter(parent_doc=previous.id,top_doc=doc.top_doc,status=1).order_by('-sort')
+                parent_list = Doc.objects.filter(
+                    parent_doc=previous.id, top_doc=doc.top_doc, status=1).order_by('-sort')
                 if parent_list.count() == 0:
                     return previous.id
                 else:

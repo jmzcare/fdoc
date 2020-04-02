@@ -1,10 +1,13 @@
-from django.core.exceptions import PermissionDenied # 权限拒绝异常
-from django.http import Http404,JsonResponse
+from django import VERSION as django_version
+from django.core.exceptions import PermissionDenied  # 权限拒绝异常
+from django.http import Http404, JsonResponse
+
 from app_admin.models import SysSetting
 from app_api.models import UserToken
-from django import VERSION as django_version
 
 # 超级管理员用户需求
+
+
 def superuser_only(function):
     """限制视图只有超级管理员能够访问"""
     def _inner(request, *args, **kwargs):
@@ -18,9 +21,11 @@ def superuser_only(function):
     return _inner
 
 # 开放注册需求
+
+
 def open_register(function):
     '''只有开放注册才能访问'''
-    def _inner(request,*args,**kwargs):
+    def _inner(request, *args, **kwargs):
         try:
             status = SysSetting.objects.get(name='close_register')
         except:
@@ -33,8 +38,10 @@ def open_register(function):
     return _inner
 
 # 请求头验证
+
+
 def check_headers(function):
-    def _inner(request,*args,**kwargs):
+    def _inner(request, *args, **kwargs):
         metas = request.META
         # if 'HTTP_COOKIE' not in metas:
         #     raise Http404
@@ -46,7 +53,7 @@ def check_headers(function):
 
 # 开放前台文集导出
 def allow_report_file(function):
-    def _inner(request,*args,**kwargs):
+    def _inner(request, *args, **kwargs):
         try:
             status = SysSetting.objects.get(name='enable_project_report')
         except:

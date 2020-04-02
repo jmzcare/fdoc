@@ -4,27 +4,32 @@
 # #日期：2019/12/7
 # 博客地址：zmister.com
 # MrDoc文集文档导出相关功能代码
-from django.conf import settings
-import subprocess
-import datetime,time
+import datetime
+import os
 import re
-import os,sys
 import shutil
-from bs4 import BeautifulSoup
-
-from django.core.wsgi import get_wsgi_application
-sys.path.extend([r'F:\pythonproject\MrDoc',])
-os.environ.setdefault("DJANGO_SETTINGS_MODULE","MrDoc.settings")
-application = get_wsgi_application()
-import django
-django.setup()
-from app_doc.models import *
-import traceback
+import subprocess
+import sys
 import time
+import traceback
+
+import django
+from bs4 import BeautifulSoup
+from django.conf import settings
+from django.core.wsgi import get_wsgi_application
+
+from app_doc.models import *
+
+sys.path.extend([r'F:\pythonproject\MrDoc', ])
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "MrDoc.settings")
+application = get_wsgi_application()
+django.setup()
 
 # 导出MD文件压缩包
+
+
 class ReportMD():
-    def __init__(self,project_id):
+    def __init__(self, project_id):
         # 查询文集信息
         self.pro_id = project_id
         project_data = Project.objects.get(pk=project_id)
@@ -41,20 +46,23 @@ class ReportMD():
             os.mkdir(settings.MEDIA_ROOT + "/reportmd_temp")
 
         # 判断文集名称文件夹是否存在
-        self.project_path = settings.MEDIA_ROOT + "/reportmd_temp/{}".format(self.project_name)
+        self.project_path = settings.MEDIA_ROOT + \
+            "/reportmd_temp/{}".format(self.project_name)
         is_fold = os.path.exists(self.project_path)
         if is_fold is False:
             os.mkdir(self.project_path)
 
         # 判断是否存在静态文件文件夹
-        self.media_path = settings.MEDIA_ROOT + "/reportmd_temp/{}/media".format(self.project_name)
+        self.media_path = settings.MEDIA_ROOT + \
+            "/reportmd_temp/{}/media".format(self.project_name)
         is_media = os.path.exists(self.media_path)
         if is_media is False:
             os.mkdir(self.media_path)
 
     def work(self):
         # 读取指定文集的文档数据
-        data = Doc.objects.filter(top_doc=self.pro_id, parent_doc=0).order_by("sort")
+        data = Doc.objects.filter(
+            top_doc=self.pro_id, parent_doc=0).order_by("sort")
         # 遍历文档
         for d in data:
             md_name = d.name
@@ -62,7 +70,7 @@ class ReportMD():
             md_content = self.operat_md_media(md_content)
 
             # 新建MD文件
-            with open('{}/{}.md'.format(self.project_path,md_name),'w',encoding='utf-8') as files:
+            with open('{}/{}.md'.format(self.project_path, md_name), 'w', encoding='utf-8') as files:
                 files.write(md_content)
 
             # 查询二级文档
@@ -102,7 +110,7 @@ class ReportMD():
         return "{}.zip".format(self.project_path)
 
     # 处理MD内容中的静态文件
-    def operat_md_media(self,md_content):
+    def operat_md_media(self, md_content):
         # 查找MD内容中的静态文件
         pattern = r"\!\[.*?\]\(.*?\)"
         media_list = re.findall(pattern, md_content)
@@ -110,19 +118,22 @@ class ReportMD():
         # 存在静态文件,进行遍历
         if len(media_list) > 0:
             for media in media_list:
-                media_filename = media.split("(")[-1].split(")")[0] # 媒体文件的文件名
+                media_filename = media.split("(")[-1].split(")")[0]  # 媒体文件的文件名
                 # 对本地静态文件进行复制
                 if media_filename.startswith("/"):
-                    sub_folder = "/" + media_filename.split("/")[3] # 获取子文件夹的名称
+                    sub_folder = "/" + \
+                        media_filename.split("/")[3]  # 获取子文件夹的名称
                     is_sub_folder = os.path.exists(self.media_path+sub_folder)
                     # 创建子文件夹
                     if is_sub_folder is False:
                         os.mkdir(self.media_path+sub_folder)
                     # 替换MD内容的静态文件链接
-                    md_content = md_content.replace(media_filename, "." + media_filename)
+                    md_content = md_content.replace(
+                        media_filename, "." + media_filename)
                     # 复制静态文件到指定文件夹
                     try:
-                        shutil.copy(settings.BASE_DIR + media_filename, self.media_path+sub_folder)
+                        shutil.copy(settings.BASE_DIR +
+                                    media_filename, self.media_path+sub_folder)
                     except FileNotFoundError:
                         pass
                 # 不存在本地静态文件，直接返回MD内容
@@ -136,7 +147,7 @@ class ReportMD():
 
 # 导出EPUB
 class ReportEPUB():
-    def __init__(self,project_id):
+    def __init__(self, project_id):
         self.project = Project.objects.get(id=project_id)
         self.base_path = settings.MEDIA_ROOT + '/report/{}/'.format(project_id)
 
@@ -153,24 +164,32 @@ class ReportEPUB():
             os.makedirs(self.base_path + '/META-INF')
 
         # 复制样式文件到相关目录
-        shutil.copyfile(settings.BASE_DIR+'/static/report_epub/style.css',self.base_path + '/OEBPS/Styles/style.css')
-        shutil.copyfile(settings.BASE_DIR+'/static/katex/katex.min.css',self.base_path + '/OEBPS/Styles/katex.css')
-        shutil.copyfile(settings.BASE_DIR+'/static/editor.md/css/editormd.min.css/',self.base_path + '/OEBPS/Styles/editormd.css')
+        shutil.copyfile(settings.BASE_DIR+'/static/report_epub/style.css',
+                        self.base_path + '/OEBPS/Styles/style.css')
+        shutil.copyfile(settings.BASE_DIR+'/static/katex/katex.min.css',
+                        self.base_path + '/OEBPS/Styles/katex.css')
+        shutil.copyfile(settings.BASE_DIR+'/static/editor.md/css/editormd.min.css/',
+                        self.base_path + '/OEBPS/Styles/editormd.css')
         # 复制封面图片到相关目录
-        shutil.copyfile(settings.BASE_DIR+'/static/report_epub/epub_cover1.jpg',self.base_path + '/OEBPS/Images/epub_cover1.jpg')
+        shutil.copyfile(settings.BASE_DIR+'/static/report_epub/epub_cover1.jpg',
+                        self.base_path + '/OEBPS/Images/epub_cover1.jpg')
 
     # 将文档内容写入HTML文件
     def write_html(self, d, html_str):
         # 使用BeautifulSoup解析拼接好的HTML文本
         html_soup = BeautifulSoup(html_str, 'lxml')
-        src_tag = html_soup.find_all(lambda tag: tag.has_attr("src"))  # 查找所有包含src的标签
+        src_tag = html_soup.find_all(
+            lambda tag: tag.has_attr("src"))  # 查找所有包含src的标签
         code_tag = html_soup.find_all(name="code")
         # print(src_tag)
 
         # 添加css样式标签
-        style_link = html_soup.new_tag(name='link',href="../Styles/style.css",rel="stylesheet",type="text/css")
-        katex_link = html_soup.new_tag(name='link',href='../Styles/katex.css',rel="stylesheet",type="text/css")
-        editormd_link = html_soup.new_tag(name='link',href='../Styles/editormd.css',rel="stylesheet",type="text/css")
+        style_link = html_soup.new_tag(
+            name='link', href="../Styles/style.css", rel="stylesheet", type="text/css")
+        katex_link = html_soup.new_tag(
+            name='link', href='../Styles/katex.css', rel="stylesheet", type="text/css")
+        editormd_link = html_soup.new_tag(
+            name='link', href='../Styles/editormd.css', rel="stylesheet", type="text/css")
         html_soup.body.insert_before(style_link)
         html_soup.body.insert_before(katex_link)
         # html_soup.body.insert_before(editormd_link)
@@ -183,14 +202,14 @@ class ReportEPUB():
         # 替换HTML文本中静态文件的相对链接为绝对链接
         for src in src_tag:
             if src['src'].startswith("/"):
-                src_path = src['src'] # 媒体文件原始路径
-                src_filename = src['src'].split("/")[-1] # 媒体文件名
-                src['src'] = '../Images/' + src_filename # 媒体文件在EPUB中的路径
+                src_path = src['src']  # 媒体文件原始路径
+                src_filename = src['src'].split("/")[-1]  # 媒体文件名
+                src['src'] = '../Images/' + src_filename  # 媒体文件在EPUB中的路径
                 # 复制文件到epub的Images文件夹
                 try:
                     shutil.copyfile(
-                        src= settings.BASE_DIR + src_path,
-                        dst= self.base_path + '/OEBPS/Images/' + src_filename
+                        src=settings.BASE_DIR + src_path,
+                        dst=self.base_path + '/OEBPS/Images/' + src_filename
                     )
                 except FileNotFoundError as e:
                     pass
@@ -205,12 +224,14 @@ class ReportEPUB():
         # 创建写入临时HTML文件
         temp_file_path = self.base_path + '/OEBPS/Text/{0}.xhtml'.format(d.id)
         with open(temp_file_path, 'a+', encoding='utf-8') as htmlfile:
-            htmlfile.write('<?xml version="1.0" encoding="UTF-8"?>' + str(html_soup))
+            htmlfile.write(
+                '<?xml version="1.0" encoding="UTF-8"?>' + str(html_soup))
 
     # 生成文档HTML
     def generate_html(self):
         # 查询文档
-        data = Doc.objects.filter(top_doc=self.project.id, parent_doc=0, status=1).order_by("sort")
+        data = Doc.objects.filter(
+            top_doc=self.project.id, parent_doc=0, status=1).order_by("sort")
         self.toc_list = [
             {
                 'id': 0,
@@ -232,15 +253,16 @@ class ReportEPUB():
 
         for d in data:
             # 拼接HTML字符串
-            html_str = "<h1 style='page-break-before: always;'>{}</h1>".format(d.name)
+            html_str = "<h1 style='page-break-before: always;'>{}</h1>".format(
+                d.name)
             html_str += d.content
-            self.write_html(d=d,html_str=html_str) # 生成HTML
+            self.write_html(d=d, html_str=html_str)  # 生成HTML
             # 生成HTML的目录位置
             toc = {
-                'id':d.id,
-                'link':'{}.xhtml'.format(d.id),
-                'pid':d.parent_doc,
-                'title':d.name
+                'id': d.id,
+                'link': '{}.xhtml'.format(d.id),
+                'pid': d.parent_doc,
+                'title': d.name
             }
             self.toc_list.append(toc)
 
@@ -248,25 +270,28 @@ class ReportEPUB():
             toc_nav = '''<navPoint id="np_{nav_num}" playOrder="{nav_num}">
                     <navLabel><text>{title}</text></navLabel>
                     <content src="Text/{file}"/>
-                '''.format(nav_num=nav_num,title=d.name,file=toc['link'])
+                '''.format(nav_num=nav_num, title=d.name, file=toc['link'])
             nav_str += toc_nav
 
             # toc_summary
-            toc_summary_str += '''<li><a href="./{}">{}</a>'''.format(toc['link'],toc['title'])
+            toc_summary_str += '''<li><a href="./{}">{}</a>'''.format(
+                toc['link'], toc['title'])
             # content.opf
-            manifest += '<item id="{}" href="Text/{}.xhtml" media-type="application/xhtml+xml"/>'.format(d.id, d.id)
+            manifest += '<item id="{}" href="Text/{}.xhtml" media-type="application/xhtml+xml"/>'.format(
+                d.id, d.id)
             spine += '<itemref idref="{}"/>'.format(d.id)
 
             nav_num += 1
 
             # 获取第二级文档
-            data_2 = Doc.objects.filter(parent_doc=d.id,status=1).order_by("sort")
+            data_2 = Doc.objects.filter(
+                parent_doc=d.id, status=1).order_by("sort")
             if data_2.count() > 0:
                 toc_summary_str += '<ul>'
             for d2 in data_2:
                 html_str = "<h1>{}</h1>".format(d2.name)
                 html_str += d2.content
-                self.write_html(d=d2,html_str=html_str)
+                self.write_html(d=d2, html_str=html_str)
                 # 生成HTML的目录位置
                 toc = {
                     'id': d2.id,
@@ -282,21 +307,24 @@ class ReportEPUB():
                 nav_str += toc_nav
 
                 # toc_summary
-                toc_summary_str += '''<li><a href="./{}">{}</a>'''.format(toc['link'], toc['title'])
+                toc_summary_str += '''<li><a href="./{}">{}</a>'''.format(
+                    toc['link'], toc['title'])
                 # content.opf
-                manifest += '<item id="{}" href="Text/{}.xhtml" media-type="application/xhtml+xml"/>'.format(d2.id, d2.id)
+                manifest += '<item id="{}" href="Text/{}.xhtml" media-type="application/xhtml+xml"/>'.format(
+                    d2.id, d2.id)
                 spine += '<itemref idref="{}"/>'.format(d2.id)
 
                 nav_num += 1
 
                 # 获取第三级文档
-                data_3 = Doc.objects.filter(parent_doc=d2.id,status=1).order_by("sort")
+                data_3 = Doc.objects.filter(
+                    parent_doc=d2.id, status=1).order_by("sort")
                 if data_3.count() > 0:
                     toc_summary_str += '<ul>'
                 for d3 in data_3:
                     html_str = "<h1>{}</h1>".format(d3.name)
                     html_str += d3.content
-                    self.write_html(d=d3,html_str=html_str)
+                    self.write_html(d=d3, html_str=html_str)
                     # 生成HTML的目录位置
                     toc = {
                         'id': d3.id,
@@ -314,10 +342,11 @@ class ReportEPUB():
                     nav_str += toc_nav
 
                     # toc_summary
-                    toc_summary_str += '''<li><a href="./{}">{}</a></li>'''.format(toc['link'], toc['title'])
+                    toc_summary_str += '''<li><a href="./{}">{}</a></li>'''.format(
+                        toc['link'], toc['title'])
                     # content.opf
                     manifest += '<item id="{}" href="Text/{}.xhtml" media-type="application/xhtml+xml"/>'.format(d3.id,
-                                                                                                                d3.id)
+                                                                                                                 d3.id)
                     spine += '<itemref idref="{}"/>'.format(d3.id)
 
                     nav_num += 1
@@ -366,9 +395,10 @@ class ReportEPUB():
         '''.format(
             title=self.project.name,
             author=self.project.create_user,
-            create_time = time.strftime('%Y{y}%m{m}%d{d}').format(y='年',m='月',d='日')
+            create_time=time.strftime(
+                '%Y{y}%m{m}%d{d}').format(y='年', m='月', d='日')
         )
-        with open(self.base_path+'/OEBPS/Text/book_title.xhtml','a+',encoding='utf-8') as file:
+        with open(self.base_path+'/OEBPS/Text/book_title.xhtml', 'a+', encoding='utf-8') as file:
             file.write(title_str)
 
         desc_str = '''<?xml version="1.0" encoding="UTF-8"?>
@@ -386,7 +416,7 @@ class ReportEPUB():
             </body>
             </html>
         '''.format(desc=self.project.intro)
-        with open(self.base_path+'/OEBPS/Text/book_desc.xhtml','a+',encoding='utf-8') as file:
+        with open(self.base_path+'/OEBPS/Text/book_desc.xhtml', 'a+', encoding='utf-8') as file:
             file.write(desc_str)
 
     # 生成元信息container.xml文件
@@ -399,12 +429,12 @@ class ReportEPUB():
             </container>
             '''
         folder = self.base_path + '/META-INF'
-        with open(folder+'/container.xml','a+',encoding='utf-8') as metafile:
+        with open(folder+'/container.xml', 'a+', encoding='utf-8') as metafile:
             metafile.write(xml)
 
     # 生成元类型mimetype文件
     def generate_metatype(self):
-        with open(self.base_path+'/mimetype','a+',encoding='utf-8') as metatype:
+        with open(self.base_path+'/mimetype', 'a+', encoding='utf-8') as metatype:
             metatype.write('application/epub+zip')
 
     # 生成封面
@@ -427,7 +457,7 @@ class ReportEPUB():
             </body>
             </html>
         '''
-        with open(self.base_path + '/OEBPS/Text/book_cover.xhtml','a+', encoding='utf-8') as cover:
+        with open(self.base_path + '/OEBPS/Text/book_cover.xhtml', 'a+', encoding='utf-8') as cover:
             cover.write(xml_str)
 
     # 生成文档目录.ncx文件
@@ -446,9 +476,9 @@ class ReportEPUB():
               </docTitle>
               {nav_map}
             </ncx>
-        '''.format(title=self.project.name,nav_map=self.nav_str)
+        '''.format(title=self.project.name, nav_map=self.nav_str)
 
-        with open(self.base_path+'/OEBPS/toc.ncx','a+',encoding='utf-8') as file:
+        with open(self.base_path+'/OEBPS/toc.ncx', 'a+', encoding='utf-8') as file:
             file.write(ncx)
 
     # 生成文档目录toc_summary.html文件
@@ -470,7 +500,7 @@ class ReportEPUB():
             </html>
         ''' % (self.toc_summary_str)
 
-        with open(self.base_path+'/OEBPS/Text/toc_summary.xhtml','a+',encoding='utf-8') as file:
+        with open(self.base_path+'/OEBPS/Text/toc_summary.xhtml', 'a+', encoding='utf-8') as file:
             file.write(summary)
 
     # 生成content.opf文件
@@ -505,15 +535,15 @@ class ReportEPUB():
             </package>
             '''
 
-        with open(self.base_path+'/OEBPS/content.opf','a+',encoding='utf-8') as file:
+        with open(self.base_path+'/OEBPS/content.opf', 'a+', encoding='utf-8') as file:
             file.write(
                 content_info.format(
-                    title = self.project.name,
-                    creator = self.project.create_user,
-                    create_time = str(datetime.date.today()),
+                    title=self.project.name,
+                    creator=self.project.create_user,
+                    create_time=str(datetime.date.today()),
                     desc=self.project.intro,
                     manifest=self.manifest,
-                    spine = self.spine,
+                    spine=self.spine,
                 )
             )
 
@@ -521,15 +551,18 @@ class ReportEPUB():
     def generate_epub(self):
         try:
             # 生成ZIP压缩文件
-            zipfile_name = settings.MEDIA_ROOT + '/report/{}'.format(self.project.name)+'_'+str(int(time.time()))
+            zipfile_name = settings.MEDIA_ROOT + \
+                '/report/{}'.format(self.project.name) + \
+                '_'+str(int(time.time()))
             zip_name = shutil.make_archive(
-                base_name = zipfile_name,
+                base_name=zipfile_name,
                 format='zip',
-                root_dir= settings.MEDIA_ROOT + '/report/{}'.format(self.project.id)
+                root_dir=settings.MEDIA_ROOT +
+                '/report/{}'.format(self.project.id)
             )
             # print(zip_name)
             # 修改zip压缩文件后缀为EPUB
-            os.rename(zip_name,zipfile_name+'.epub')
+            os.rename(zip_name, zipfile_name+'.epub')
             # 删除生成的临时文件夹
             shutil.rmtree(self.base_path)
             return zipfile_name
@@ -539,20 +572,22 @@ class ReportEPUB():
             return None
 
     def work(self):
-        self.generate_html() # 生成HTML
-        self.generate_metainfo() # 生成元信息
-        self.generate_metatype() # 生成元类型
-        self.generate_toc_ncx() # 生成目录ncx
-        self.generate_toc_html() # 生成目录html
-        self.generate_cover() # 生成封面html
-        self.generate_title_html() # 生产书籍的标题页和简介页
-        self.generate_opf() # 生成content.opf
+        self.generate_html()  # 生成HTML
+        self.generate_metainfo()  # 生成元信息
+        self.generate_metatype()  # 生成元类型
+        self.generate_toc_ncx()  # 生成目录ncx
+        self.generate_toc_html()  # 生成目录html
+        self.generate_cover()  # 生成封面html
+        self.generate_title_html()  # 生产书籍的标题页和简介页
+        self.generate_opf()  # 生成content.opf
         epub_file = self.generate_epub()
         return epub_file
 
 # 导出Docx
+
+
 class ReportDocx():
-    def __init__(self,project_id):
+    def __init__(self, project_id):
         self.project = Project.objects.get(id=project_id)
         self.base_path = settings.MEDIA_ROOT + '/report/{}/'.format(project_id)
 
@@ -655,10 +690,12 @@ class ReportDocx():
 
     def work(self):
         # 拼接HTML字符串
-        data = Doc.objects.filter(top_doc=self.project.id,parent_doc=0).order_by("sort")
+        data = Doc.objects.filter(
+            top_doc=self.project.id, parent_doc=0).order_by("sort")
         for d in data:
             # print(d.name,d.content)
-            self.content_str += "<h1 style='page-break-before: always;'>{}</h1>".format(d.name)
+            self.content_str += "<h1 style='page-break-before: always;'>{}</h1>".format(
+                d.name)
             self.content_str += d.content
             # 获取第二级文档
             data_2 = Doc.objects.filter(parent_doc=d.id).order_by("sort")
@@ -673,8 +710,9 @@ class ReportDocx():
                     self.content_str += d3.content
 
         # 使用BeautifulSoup解析拼接好的HTML文本
-        soup = BeautifulSoup(self.content_str,'lxml')
-        src_tag = soup.find_all(lambda tag:tag.has_attr("src")) # 查找所有包含src的标签
+        soup = BeautifulSoup(self.content_str, 'lxml')
+        src_tag = soup.find_all(
+            lambda tag: tag.has_attr("src"))  # 查找所有包含src的标签
         print(src_tag)
 
         # 替换HTML文本中静态文件的相对链接为绝对链接
@@ -686,11 +724,13 @@ class ReportDocx():
         # 创建文件夹
         if is_folder is False:
             os.mkdir(self.base_path)
-        temp_file_name = str(datetime.datetime.today()).replace(':', '-').replace(' ', '-').replace('.', '')
+        temp_file_name = str(datetime.datetime.today()).replace(
+            ':', '-').replace(' ', '-').replace('.', '')
         temp_file_path = self.base_path + '/{0}.docx'.format(temp_file_name)
 
         with open(temp_file_path, 'a+', encoding='utf-8') as htmlfile:
             htmlfile.write(self.doc_str + self.content_str + "</body></html>")
+
 
 if __name__ == '__main__':
     # app = ReportMD(
