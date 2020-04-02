@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/2.1/ref/settings/
 """
 
+import importlib
 import os
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
@@ -39,7 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-	'app_admin',
+    'app_admin',
     'app_doc',
     'app_api',
     'django.contrib.sitemaps',
@@ -61,8 +62,8 @@ TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': [
-			os.path.join(BASE_DIR,'template')
-		],
+            os.path.join(BASE_DIR, 'template')
+        ],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -70,7 +71,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
-                'app_admin.context_processors.sys_setting', # 自定义系统设置上下文渲染
+                'app_admin.context_processors.sys_setting',  # 自定义系统设置上下文渲染
             ],
         },
     },
@@ -86,8 +87,8 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
-        'OPTIONS':{
-            'timeout':20,
+        'OPTIONS': {
+            'timeout': 20,
         }
     }
 }
@@ -133,10 +134,14 @@ STATIC_URL = '/static/'
 if DEBUG:
     STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static'), ]
 else:
-    STATIC_ROOT = os.path.join(BASE_DIR,'static')
+    STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 
 # 媒体文件
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR,'media')
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
 
+try:
+    from env import *
+except ImportError:
+    pass
