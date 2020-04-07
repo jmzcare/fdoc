@@ -10,6 +10,7 @@ from django.contrib.auth.models import User  # Django默认用户模型
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.paginator import (EmptyPage, InvalidPage,  # 后端分页
                                    PageNotAnInteger, Paginator)
+from django.db.models import Q
 from django.http.response import Http404, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 
@@ -309,7 +310,7 @@ def admin_project(request):
     if request.method == 'GET':
         search_kw = request.GET.get('kw', '')
         if search_kw == '':
-            project_list = Project.objects.all()
+            project_list = Project.objects.all().order_by('-create_time')
             paginator = Paginator(project_list, 20)
             page = request.GET.get('page', 1)
             try:
@@ -319,7 +320,8 @@ def admin_project(request):
             except EmptyPage:
                 projects = paginator.page(paginator.num_pages)
         else:
-            project_list = Project.objects.filter(intro__icontains=search_kw)
+            project_list = Project.objects.filter(
+                intro__icontains=search_kw).order_by('-create_time')
             paginator = Paginator(project_list, 20)
             page = request.GET.get('page', 1)
 
@@ -384,8 +386,9 @@ def admin_doc(request):
             except EmptyPage:
                 docs = paginator.page(paginator.num_pages)
         else:
-            doc_list = Doc.objects.filter(
-                pre_content__icontains=kw).order_by('-modify_time')
+            doc_list = Doc.objects.filter(Q(content__icontains=kw) | Q(
+                name__icontains=kw)).order_by('-modify_time')
+
             paginator = Paginator(doc_list, 10)
             page = request.GET.get('page', 1)
             try:
@@ -404,7 +407,7 @@ def admin_doctemp(request):
     if request.method == 'GET':
         kw = request.GET.get('kw', '')
         if kw == '':
-            doctemp_list = DocTemp.objects.all()
+            doctemp_list = DocTemp.objects.all().order_by('-create_time')
             paginator = Paginator(doctemp_list, 10)
             page = request.GET.get('page', 1)
             try:
@@ -414,7 +417,8 @@ def admin_doctemp(request):
             except EmptyPage:
                 doctemps = paginator.page(paginator.num_pages)
         else:
-            doctemp_list = DocTemp.objects.filter(content__icontains=kw)
+            doctemp_list = DocTemp.objects.filter(
+                content__icontains=kw).order_by('-create_time')
             paginator = Paginator(doctemp_list, 10)
             page = request.GET.get('page', 1)
             try:
@@ -432,7 +436,7 @@ def admin_doctemp(request):
 def admin_register_code(request):
     # 返回注册邀请码管理页面
     if request.method == 'GET':
-        register_codes = RegisterCode.objects.all()
+        register_codes = RegisterCode.objects.all().order_by('-create_time')
         paginator = Paginator(register_codes, 10)
         page = request.GET.get('page', 1)
         try:

@@ -25,9 +25,8 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "MrDoc.settings")
 application = get_wsgi_application()
 django.setup()
 
+
 # 导出MD文件压缩包
-
-
 class ReportMD():
     def __init__(self, project_id):
         # 查询文集信息
@@ -584,8 +583,6 @@ class ReportEPUB():
         return epub_file
 
 # 导出Docx
-
-
 class ReportDocx():
     def __init__(self, project_id):
         self.project = Project.objects.get(id=project_id)

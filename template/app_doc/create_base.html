@@ -51,13 +51,17 @@
             border-radius: 3px;
             overflow: hidden;
         }
+        /* 编辑器图标样式 */
+        .editormd-menu i{
+            color: black;
+            font-size: 20px;
+        }
     </style>
     <!--[if lt IE 9]>
       <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
       <script src="https://oss.maxcdn.com/libs/respond.js/1.3.0/respond.min.js"></script>
     <![endif]-->
     {% block custom_style %}{% endblock %}
-
 
 </head>
 <body class="layui-container">
@@ -75,6 +79,7 @@
 <script src="{% static 'jquery/3.1.1/jquery.min.js' %}"></script>
 <script src="{% static 'layui/layui.all.js' %}"></script>
 <script src="{% static 'editor.md/editormd.min.js' %}"></script>
+<script src="{% static 'mrdoc.editor.js' %}"></script>
 <script>
     $.ajaxSetup({
             data: {csrfmiddlewaretoken: '{{ csrf_token }}' },
@@ -93,9 +98,9 @@
             return [
                 "undo", "redo", "|",
                 "bold", "del", "italic", "quote", "ucwords", "uppercase", "lowercase","kaiSpan", "|",
-                "h1", "h2", "h3", "h4", "h5", "h6", "|",
-                "list-ul", "list-ol", "hr", "|",
-                "link", "reference-link","imgUpload", "code", "preformatted-text", "code-block", "table", "datetime", "emoji", "html-entities", "pagebreak", "|",
+                "h1", "h2", "h3", "h4", "|",
+                "list-ul", "list-ol", "hr", "link", "reference-link", "|",
+                "imgUpload", "attachment" ,"code", "code-block", "htmltable", "datetime", "emoji", "html-entities", "pagebreak", "|",
                 "watch", "preview", "|",
                 "help"
             ]
@@ -103,11 +108,12 @@
         //自定义工具栏添加楷体按钮
         toolbarIconTexts : {
             kaiSpan : "楷",
-            imgUpload:'fa-image',
         },
         //自定义工具栏添加图片按钮
         toolbarIconsClass : {
             imgUpload:'fa-image',
+            attachment:'fa-file-zip-o',
+            htmltable:'fa-table',
         },
         //设置自定义工具栏按钮的事件
         toolbarHandlers : {
@@ -117,6 +123,7 @@
              * @param {Object}      cursor     CodeMirror的光标对象，可获取光标所在行和位置
              * @param {String}      selection  编辑器选中的文本
              */
+             // 点击“楷”字图标的响应函数
             kaiSpan : function(cm, icon, cursor, selection) {
                 //var cursor    = cm.getCursor();     //获取当前光标对象，同cursor参数
                 //var selection = cm.getSelection();  //获取当前选中的文本，同selection参数
@@ -141,6 +148,76 @@
                     id:'uploadImg',//配置ID,
                     content:$('#upload-img'),
                 })
+            },
+            //点击工具栏文件按钮的响应函数 - 上传和选择附件
+            attachment : function(cm,icon,cursor,selection){
+                layer.ready(function(){
+                  element.init();
+                });
+                layer.open({
+                    type:'1',
+                    title:'添加附件',
+                    area:['800px','600px'],
+                    id:'uploadAttach',//配置ID,
+                    content:$('#upload-attach'),
+                    success: function(layero, index){
+                        $.post('{% url "manage_attachment" %}',{types:2},function(r){
+                            $("#attach_table tbody").empty()
+                            if(r.status){
+                                // $.each(r.data,function(k,v){
+                                //     console.log(k,v)
+                                //     var row = "<tr><td>" + v.filename + "</td><td>"+ v.filesize +"</td><td>"+ v.filetime +"</td><td><button class='layui-btn layui-btn-normal' data-name='"+ v.filename +"'  data-path='"+ v.filepath +"' onclick='insertAttach(this)'>选择</button></td></tr>"
+                                //     $("#attach_table tbody").append(row)
+                                // })
+                                //调用分页显示
+                                laypage.render({
+                                    elem: 'select-attach-page',//分页的div
+                                    count: r.data.length, //数据总数
+                                    limit:10, //单页数
+                                    jump: function(obj){
+                                        //渲染HTML
+                                        $("#attach_table tbody").empty();
+                                        var thisData = r.data.concat().splice(obj.curr*obj.limit - obj.limit, obj.limit);
+                                        layui.each(thisData, function(k, v){
+                                            var row = "<tr><td>" + v.filename + "</td><td>"+ v.filesize +"</td><td>"+ v.filetime +"</td><td><button class='layui-btn layui-btn-normal' data-name='"+ v.filename +"'  data-path='"+ v.filepath +"' onclick='insertAttach(this)'>选择</button></td></tr>"
+                                            // arr.push(row);
+                                            $("#attach_table tbody").append(row)
+                                        });
+                                    }
+                                });
+                                //layer.close(loading);//关闭加载提示
+                            }else{
+                                layer.msg("获取附件失败，请稍后重试！")
+                            }
+                        })
+
+                    }
+                })
+            },
+            //点击工具栏表格按钮的响应函数 - 添加表格
+            htmltable:function(cm,icon,cursor,selection){
+                layer.ready(function(){
+                  element.init();
+                });
+                layer.open({
+                    type:1,
+                    id:'addTable',
+                    title:'添加表格',
+                    //content:"<div style='margin:10px;'><input type='number' id='row' class='layui-input' placeholder='输入行数'><input type='number' id='col' class='layui-input' placeholder='输入列数'></div>",
+                    content:$("#layer-table"),
+                    btn:['确定','取消'], //添加按钮
+                    yes:function(index,layero){
+                        var table_md = convertTable("DataTable1")
+                        //console.log(table_md)
+                        editor.insertValue("\n" + table_md);
+                        $("#TableGroup").empty();//清空表格
+                        layer.close(index)
+                    },
+                    btn2:function(index,layero){
+                        $("#TableGroup").empty();//清空表格
+                        layer.close(index) // 关闭弹出框
+                    }
+                });
             }
         },
         //设置语言
@@ -148,6 +225,8 @@
             toolbar : {
                 kaiSpan : "添加楷体span标签",
                 imgUpload:"添加图片到文档",
+                attachment:"添加附件",
+                htmltable:"添加表格",
             }
         },
         //配置项
@@ -219,7 +298,7 @@
                 //console.log(r.data)
                 group_btn_str = ''
                 for(let i in r.data){
-                    group_btn_str += '<button class="layui-btn layui-btn-normal" onclick="switchImgGroup(' + r.data[i].group_id +')">' + r.data[i].group_name + '(' + r.data[i].group_cnt + ')</button>'
+                    group_btn_str += '<button class="layui-btn layui-btn-normal layui-btn-sm" onclick="switchImgGroup(' + r.data[i].group_id +')">' + r.data[i].group_name + '(' + r.data[i].group_cnt + ')</button>'
                 };
                 $("#select-img-group").append(group_btn_str)
             }
@@ -228,12 +307,6 @@
         var loading = layer.load();
         $.post("{% url 'manage_image' %}",{'types':2,'group_id':0},function(r){
             if(r.status){
-                //img_list_str = '<ul>'
-                //for(let i in r.data){
-                //    img_list_str += '<li class="select-img-list"><img class="select-img-list-i" src="' + r.data[i].path + '" title="' + r.data[i].name + '" /></li>'
-                //}
-                //img_list_str += '</ul>'
-                //$("#select-img").append(img_list_str);
                 //调用分页显示
                 laypage.render({
                     elem: 'select-img-page',//分页的div
@@ -297,6 +370,11 @@
                 layer.msg("获取分组图片失败")
             }
         })
+    };
+    //插入选择的附件到编辑器
+    insertAttach = function(e){
+        editor.insertValue("\n[【附件】"+ $(e).data('name') + "](/media/" + $(e).data('path') + ")");
+        layer.closeAll();
     }
 </script>
 <script src="{% static 'mrdoc.js' %}?version={{mrdoc_version}}"></script>
@@ -305,6 +383,7 @@
 </body>
 {% block custom_div %}
 {% endblock %}
+<!-- 选择和上传图片div -->
 <div id="upload-img" style="display:none;margin:20px;">
     <div class="layui-tab" lay-filter="img-tab">
       <ul class="layui-tab-title">
@@ -313,7 +392,7 @@
       </ul>
       <div class="layui-tab-content">
         <div class="layui-tab-item layui-show">
-            <button class="layui-btn layui-btn-normal layui-btn-lg" id="upload_img">点击上传图片</button>
+            <button class="layui-btn layui-btn-normal layui-btn-sm" id="upload_img">点击上传图片</button>
         </div>
         <div class="layui-tab-item">
             <div class="layui-row" id="select-img-group">
@@ -323,6 +402,47 @@
         </div>
       </div>
     </div>
+</div>
+<!-- 选择和上传附件div -->
+<div id="upload-attach" style="display:none;margin:20px;">
+    <span>* 仅支持.zip格式的压缩文件作为附件，文件大小不超过50Mb</span>
+    <div style="margin: 10px 0 0 10px;">
+        <button class="layui-btn layui-btn-normal layui-btn-sm" id="upload_attachment">点击上传附件</button>
+        <a class="layui-btn layui-btn-normal layui-btn-sm" href="{% url 'manage_attachment' %}" target="_blank">管理附件</a>
+    </div>
+    <table class="layui-table" id="attach_table" style="margin: 10px;width:90%;">
+        <thead>
+            <th>附件名称</th>
+            <th>附件大小</th>
+            <th>上传时间</th>
+            <th>操作</th>
+        </thead>
+        <tbody>
+
+        </tbody>
+        
+    </table>
+    <div id="select-attach-page"></div>
+</div>
+<!-- 添加表格div -->
+<div id="layer-table" style="display: none;margin: 10px;">
+    <div class="layui-row" style="margin: 10px;">
+        <div class="layui-form-item">
+        <div class="layui-inline">
+            <div class="layui-input-inline" style="width: 50px;">
+            <input type="number"  placeholder="行" id="row" class="layui-input" value="3">
+            </div>
+            <div class="layui-form-mid">x</div>
+            <div class="layui-input-inline" style="width: 50px;">
+            <input type="number" placeholder="列" id="col"  class="layui-input" value="3">
+            </div>
+            <div class="layui-form-mid" style="width: 100px;">
+            <button class="layui-btn layui-btn-normal layui-btn-xs" onclick="addtable(1)" >生成表格</button>
+            </div>
+        </div>
+        </div>
+    </div>
+    <div class="layui-row" style="margin:10px;" id="TableGroup"></div>
 </div>
 <script>
     //按钮选择上传图片
@@ -345,6 +465,31 @@
         field:'manage_upload',
         size: 5000, //最大允许上传的文件大小
 
+    });
+    // 按钮选择上传附件
+    var upload_attach = layui.upload;
+    upload_attach.render({
+        elem: '#upload_attachment',
+        url: '{% url "manage_attachment" %}',
+        data:{types:0,csrfmiddlewaretoken: '{{ csrf_token }}'},
+        done: function(res, index, upload){ //上传后的回调
+            //上传成功，刷新页面
+            if(res.status){
+                editor.insertValue("\n[【附件】"+ res.data.name + "](/media/" + res.data.url + ")");
+                layer.closeAll();
+                layer.msg("上传成功");
+            }else{
+                layer.msg("上传出错，请重试！")
+            }
+        },
+        accept: 'file', //允许上传的文件类型
+        exts:'zip', //允许上传zip压缩文件
+        field:'attachment_upload',
+        size: 50000, //最大允许上传的文件大小
     })
+    //修改a标签链接新窗口打开
+    $('#content').on('click','a',function(e){
+        e.target.target = '_blank';
+    });
 </script>
 </html>

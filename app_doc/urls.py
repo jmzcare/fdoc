@@ -8,6 +8,8 @@ urlpatterns = [
     path('project-<int:pro_id>/', views.project_index, name='pro_index'),  # 文集浏览页
     path('create_project/', views.create_project, name='create_project'),  # 新建文集
     path('get_pro_doc/', views.get_pro_doc, name="get_pro_doc"),  # 获取某个文集的下级文档
+    path('get_pro_doc_tree/', views.get_pro_doc_tree,
+         name="get_pro_doc_tree"),  # 获取某个文集的下级文档树数据
     path('modify_pro/', views.modify_project, name='modify_project'),  # 修改文集
     path('manage_project', views.manage_project, name="manage_project"),  # 管理文集
     path('del_project/', views.del_project, name='del_project'),  # 删除文集
@@ -20,6 +22,10 @@ urlpatterns = [
          name="modify_pro_download"),  # 修改文集前台下载权限
     path('check_viewcode/', views.check_viewcode,
          name='check_viewcode'),  # 文集访问码验证
+    path('manage_project_colla/<int:pro_id>/',
+         views.manage_project_collaborator, name="manage_pro_colla"),  # 管理文集协作，v0.4新增
+    path('manage_pro_colla_self/', views.manage_pro_colla_self,
+         name="manage_pro_colla_self"),  # 我协作的文集，v0.4新增
     # 文档相关
     path('project-<int:pro_id>/doc-<int:doc_id>/',
          views.doc, name='doc'),  # 文档浏览页
@@ -40,6 +46,8 @@ urlpatterns = [
     path('manage_image/', views.manage_image, name="manage_image"),  # 图片管理
     path('manage_image_group/', views.manage_img_group,
          name="manage_img_group"),  # 图片分组管理
+    path('manage_attachment/', views.manage_attachment,
+         name='manage_attachment'),  # 附件管理
     # 其他功能相关
     path('upload_doc_img/', util_upload_img.upload_img,
          name="upload_doc_img"),  # 上传图片

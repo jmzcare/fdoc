@@ -14,34 +14,71 @@ from django.http import HttpResponseForbidden
 from django.http.response import (Http404, HttpResponse,
                                   HttpResponseNotAllowed, JsonResponse)
 from django.shortcuts import redirect, render
-from django.views.decorators.http import (require_GET,  # 视图请求方法装饰器
-                                          require_http_methods, require_POST)
+from django.views.decorators.http import require_GET  # 视图请求方法装饰器
+from django.views.decorators.http import require_http_methods, require_POST
 
 from app_admin.decorators import allow_report_file, check_headers
 from app_doc.models import Doc, DocTemp, Project
 from app_doc.report_utils import *
 
+
 # 替换前端传来的非法字符
-
-
 def validateTitle(title):
     rstr = r"[\/\\\:\*\?\"\<\>\|]"  # '/ \ : * ? " < > |'
     new_title = re.sub(rstr, "_", title)  # 替换为下划线
     return new_title
 
+
 # 文集列表
-
-
 def project_list(request):
-    # 登录用户
-    if request.user.is_authenticated:
-        project_list = Project.objects.filter(
-            Q(role__in=[0, 3]) | Q(role=2, role_value__contains=str(
-                request.user.username)) | Q(create_user=request.user)
-        )
+    kw = request.GET.get('kw', '')
+    if kw == '':
+        # 登录用户
+        if request.user.is_authenticated:
+            # 用户的协作文集
+            colla_list = [
+                i.project.id for i in ProjectCollaborator.objects.filter(user=request.user)]
+            # 查询所有可显示的文集
+            project_list = Project.objects.filter(
+                Q(role__in=[0, 3]) |
+                Q(role=2, role_value__contains=str(request.user.username)) |
+                Q(create_user=request.user) |
+                Q(id__in=colla_list)
+            )
+        else:
+            # 非登录用户只显示公开文集和需要访问码的文集
+            project_list = Project.objects.filter(role__in=[0, 3])
     else:
-        # 非登录用户只显示公开文集和需要访问码的文集
-        project_list = Project.objects.filter(role__in=[0, 3])
+        # 登录用户
+        if request.user.is_authenticated:
+            # 用户的协作文集
+            colla_list = [
+                i.project.id for i in ProjectCollaborator.objects.filter(user=request.user)]
+            # 查询所有可显示的文集
+            project_list = Project.objects.filter(
+                Q(role__in=[0, 3]) |
+                Q(role=2, role_value__contains=str(request.user.username)) |
+                Q(create_user=request.user) |
+                Q(id__in=colla_list),
+                Q(name__icontains=kw) | Q(intro__icontains=kw)
+            )
+        else:
+            # 非登录用户只显示公开文集和需要访问码的文集
+            project_list = Project.objects.filter(
+                Q(name__icontains=kw) | Q(intro__icontains=kw),
+                role__in=[0, 3]
+            )
+    # 分页处理
+    # 对查询的文集列表按创建时间排序，这个是默认的排序策略
+    project_list = project_list.order_by('-create_time')
+    paginator = Paginator(project_list, 12)
+    page = request.GET.get('page', 1)
+    try:
+        projects = paginator.page(page)
+    except PageNotAnInteger:
+        projects = paginator.page(1)
+    except EmptyPage:
+        projects = paginator.page(paginator.num_pages)
     return render(request, 'app_doc/pro_list.html', locals())
 
 
@@ -82,6 +119,12 @@ def project_index(request, pro_id):
     try:
         # 获取文集信息
         project = Project.objects.get(id=int(pro_id))
+        # 获取文集的协作用户信息
+        if request.user.is_authenticated:  # 对登陆用户查询其协作文档信息
+            colla_user = ProjectCollaborator.objects.filter(
+                project=project, user=request.user).count()
+        else:
+            colla_user = 0
 
         # 获取问价文集前台下载权限
         try:
@@ -90,21 +133,23 @@ def project_index(request, pro_id):
         except ObjectDoesNotExist:
             allow_epub_download = 0
 
-        # 私密文集并且访问者非创建者
-        if project.role == 1 and request.user != project.create_user:
+        # 私密文集并且访问者非创建者非协作者
+        if (project.role == 1) and (request.user != project.create_user) and (colla_user == 0):
             return render(request, '404.html')
         # 指定用户可见文集
         elif project.role == 2:
             user_list = project.role_value
             if request.user.is_authenticated:  # 认证用户判断是否在许可用户列表中
-                if request.user.username not in user_list and request.user != project.create_user:  # 访问者不在指定用户之中
+                if (request.user.username not in user_list) and \
+                        (request.user != project.create_user) and \
+                        (colla_user == 0):  # 访问者不在指定用户之中
                     return render(request, '404.html')
             else:  # 游客直接返回404
                 return render(request, '404.html')
         # 访问码可见
         elif project.role == 3:
-            # 浏览用户不为创建者
-            if request.user != project.create_user:
+            # 浏览用户不为创建者、协作者
+            if request.user != project.create_user and colla_user == 0:
                 viewcode = project.role_value
                 viewcode_name = 'viewcode-{}'.format(project.id)
                 r_viewcode = request.COOKIES[viewcode_name] if viewcode_name in request.COOKIES.keys(
@@ -125,7 +170,7 @@ def project_index(request, pro_id):
     except Exception as e:
         if settings.DEBUG:
             print(traceback.print_exc())
-        return HttpResponse('请求出错')
+        return render(request, '404.html')
 
 
 # 修改文集
@@ -135,6 +180,7 @@ def modify_project(request):
         try:
             pro_id = request.POST.get('pro_id', None)
             project = Project.objects.get(id=pro_id)
+            # 验证用户有权限修改文集
             if (request.user == project.create_user) or request.user.is_superuser:
                 name = request.POST.get('name', None)
                 content = request.POST.get('desc', None)
@@ -249,7 +295,7 @@ def manage_project(request):
             search_kw = request.GET.get('kw', None)
             if search_kw:
                 pro_list = Project.objects.filter(
-                    create_user=request.user, intro__icontains=search_kw)
+                    create_user=request.user, intro__icontains=search_kw).order_by('-create_time')
                 paginator = Paginator(pro_list, 10)
                 page = request.GET.get('page', 1)
                 try:
@@ -260,7 +306,8 @@ def manage_project(request):
                     pros = paginator.page(paginator.num_pages)
                 pros.kw = search_kw
             else:
-                pro_list = Project.objects.filter(create_user=request.user)
+                pro_list = Project.objects.filter(
+                    create_user=request.user).order_by('-create_time')
                 paginator = Paginator(pro_list, 10)
                 page = request.GET.get('page', 1)
                 try:
@@ -273,7 +320,7 @@ def manage_project(request):
         except Exception as e:
             if settings.DEBUG:
                 print(traceback.print_exc())
-            return HttpResponse('请求出错')
+            return render(request, '404.html')
     else:
         return HttpResponse('方法不允许')
 
@@ -303,6 +350,83 @@ def modify_project_download(request, pro_id):
             return render(request, 'app_doc/manage_project_download.html', locals())
 
 
+# 文集协作管理
+@login_required()
+def manage_project_collaborator(request, pro_id):
+    project = Project.objects.filter(id=pro_id, create_user=request.user)
+    if project.exists() is False:
+        return Http404
+
+    if request.method == 'GET':
+        pro = project[0]
+        collaborator = ProjectCollaborator.objects.filter(project=pro)
+        return render(request, 'app_doc/manage_project_collaborator.html', locals())
+
+    elif request.method == 'POST':
+        # type类型：0表示新增协作者、1表示删除协作者、2表示修改协作者
+        types = request.POST.get('types', '')
+        try:
+            types = int(types)
+        except:
+            return JsonResponse({'status': False, 'data': '参数错误'})
+        # 添加文集协作者
+        if int(types) == 0:
+            colla_user = request.POST.get('username', '')
+            role = request.POST.get('role', 0)
+            user = User.objects.filter(username=colla_user)
+            if user.exists():
+                if user[0] == project[0].create_user:  # 用户为文集的创建者
+                    return JsonResponse({'status': False, 'data': '文集创建者无需添加'})
+                elif ProjectCollaborator.objects.filter(user=user[0], project=project[0]).exists():
+                    return JsonResponse({'status': False, 'data': '用户已存在'})
+                else:
+                    ProjectCollaborator.objects.create(
+                        project=project[0],
+                        user=user[0],
+                        role=role if role in ['1', 1] else 0
+                    )
+                    return JsonResponse({'status': True, 'data': '添加成功'})
+            else:
+                return JsonResponse({'status': False, 'data': '用户不存在'})
+        # 删除文集协作者
+        elif int(types) == 1:
+            username = request.POST.get('username', '')
+            try:
+                user = User.objects.get(username=username)
+                pro_colla = ProjectCollaborator.objects.get(
+                    project=project[0], user=user)
+                pro_colla.delete()
+                return JsonResponse({'status': True, 'data': '删除成功'})
+            except:
+                if settings.DEBUG:
+                    print(traceback.print_exc())
+                return JsonResponse({'status': False, 'data': '删除出错'})
+        # 修改协作权限
+        elif int(types) == 2:
+            username = request.POST.get('username', '')
+            role = request.POST.get('role', '')
+            try:
+                user = User.objects.get(username=username)
+                pro_colla = ProjectCollaborator.objects.filter(
+                    project=project[0], user=user)
+                pro_colla.update(role=role)
+                return JsonResponse({'status': True, 'data': '修改成功'})
+            except:
+                if settings.DEBUG:
+                    print(traceback.print_exc())
+                return JsonResponse({'status': False, 'data': '修改失败'})
+
+        else:
+            return JsonResponse({'status': False, 'data': '无效的类型'})
+
+
+# 我协作的文集
+@login_required()
+def manage_pro_colla_self(request):
+    colla_pros = ProjectCollaborator.objects.filter(user=request.user)
+    return render(request, 'app_doc/manage_project_self_colla.html', locals())
+
+
 # 文档浏览页页
 @require_http_methods(['GET'])
 def doc(request, pro_id, doc_id):
@@ -310,22 +434,36 @@ def doc(request, pro_id, doc_id):
         if pro_id != '' and doc_id != '':
             # 获取文集信息
             project = Project.objects.get(id=int(pro_id))
+            # 获取文集的协作用户信息
+            if request.user.is_authenticated:
+                colla_user = ProjectCollaborator.objects.filter(
+                    project=project, user=request.user)
+                if colla_user.exists():
+                    colla_user_role = colla_user[0].role
+                    colla_user = colla_user.count()
+                else:
+                    colla_user = colla_user.count()
+            else:
+                colla_user = 0
 
-            # 私密文集并且访问者非创建者
-            if project.role == 1 and request.user != project.create_user:
+            # 私密文集且访问者非创建者、协作者 - 不能访问
+            if (project.role == 1) and (request.user != project.create_user) and (colla_user == 0):
                 return render(request, '404.html')
+
             # 指定用户可见文集
             elif project.role == 2:
                 user_list = project.role_value
                 if request.user.is_authenticated:  # 认证用户判断是否在许可用户列表中
-                    if request.user.username not in user_list and request.user != project.create_user:  # 访问者不在指定用户之中
+                    if (request.user.username not in user_list) and \
+                            (request.user != project.create_user) and \
+                            (colla_user == 0):  # 访问者不在指定用户之中，也不是协作者
                         return render(request, '404.html')
                 else:  # 游客直接返回404
                     return render(request, '404.html')
             # 访问码可见
             elif project.role == 3:
-                # 浏览用户不为创建者
-                if request.user != project.create_user:
+                # 浏览用户不为创建者和协作者 - 需要访问码
+                if (request.user != project.create_user) and (colla_user == 0):
                     viewcode = project.role_value
                     viewcode_name = 'viewcode-{}'.format(project.id)
                     r_viewcode = request.COOKIES[
@@ -349,7 +487,7 @@ def doc(request, pro_id, doc_id):
     except Exception as e:
         if settings.DEBUG:
             print(traceback.print_exc())
-        return HttpResponse('请求出错')
+        return render(request, '404.html')
 
 
 # 创建文档
@@ -358,15 +496,17 @@ def create_doc(request):
     if request.method == 'GET':
         try:
             pid = request.GET.get('pid', -999)
-            # doc_list = Doc.objects.filter(create_user=request.user)
-            project_list = Project.objects.filter(create_user=request.user)
+            project_list = Project.objects.filter(
+                create_user=request.user)  # 自己创建的文集列表
+            colla_project_list = ProjectCollaborator.objects.filter(
+                user=request.user)  # 协作的文集列表
             doctemp_list = DocTemp.objects.filter(
                 create_user=request.user).values('id', 'name', 'create_time')
             return render(request, 'app_doc/create_doc.html', locals())
         except Exception as e:
             if settings.DEBUG:
                 print(traceback.print_exc())
-            return HttpResponse('请求出错')
+            return render(request, '404.html')
     elif request.method == 'POST':
         try:
             project = request.POST.get('project', '')
@@ -377,19 +517,28 @@ def create_doc(request):
             sort = request.POST.get('sort', '')
             status = request.POST.get('status', 1)
             if project != '' and doc_name != '' and project != '-1':
-                doc = Doc.objects.create(
-                    name=doc_name,
-                    content=doc_content,
-                    pre_content=pre_content,
-                    parent_doc=int(parent_doc) if parent_doc != '' else 0,
-                    top_doc=int(project),
-                    sort=sort if sort != '' else 99,
-                    create_user=request.user,
-                    status=status
-                )
-                return JsonResponse({'status': True, 'data': {'pro': project, 'doc': doc.id}})
+                # 验证请求者是否有文集的权限，v0.4版本新增
+                check_project = Project.objects.filter(
+                    id=project, create_user=request.user)
+                colla_project = ProjectCollaborator.objects.filter(
+                    project=project, user=request.user)
+                if check_project.count() > 0 or colla_project.count() > 0:
+                    # 创建文档
+                    doc = Doc.objects.create(
+                        name=doc_name,
+                        content=doc_content,
+                        pre_content=pre_content,
+                        parent_doc=int(parent_doc) if parent_doc != '' else 0,
+                        top_doc=int(project),
+                        sort=sort if sort != '' else 99,
+                        create_user=request.user,
+                        status=status
+                    )
+                    return JsonResponse({'status': True, 'data': {'pro': project, 'doc': doc.id}})
+                else:
+                    return JsonResponse({'status': False, 'data': '无权操作此文集'})
             else:
-                return JsonResponse({'status': False, 'data': '参数错误'})
+                return JsonResponse({'status': False, 'data': '请确认文档标题、文集正确'})
         except Exception as e:
             if settings.DEBUG:
                 print(traceback.print_exc())
@@ -403,18 +552,20 @@ def create_doc(request):
 def modify_doc(request, doc_id):
     if request.method == 'GET':
         try:
-            doc = Doc.objects.get(id=doc_id)
-            if request.user == doc.create_user:
-                project = Project.objects.get(id=doc.top_doc)
+            doc = Doc.objects.get(id=doc_id)  # 查询文档信息
+            project = Project.objects.get(id=doc.top_doc)  # 查询文档所属的文集信息
+            pro_colla = ProjectCollaborator.objects.filter(
+                project=project, user=request.user)  # 查询用户的协作文集信息
+            if (request.user == doc.create_user) or (pro_colla[0].role == 1):
                 doc_list = Doc.objects.filter(top_doc=project.id)
                 doctemp_list = DocTemp.objects.filter(create_user=request.user)
                 return render(request, 'app_doc/modify_doc.html', locals())
             else:
-                return HttpResponse("非法请求")
+                return render(request, '403.html')
         except Exception as e:
             if settings.DEBUG:
                 print(traceback.print_exc())
-            return HttpResponse('请求出错')
+            return render(request, '404.html')
     elif request.method == 'POST':
         try:
             doc_id = request.POST.get('doc_id', '')  # 文档ID
@@ -425,18 +576,26 @@ def modify_doc(request, doc_id):
             pre_content = request.POST.get('pre_content', '')  # 文档Markdown格式内容
             sort = request.POST.get('sort', '')  # 文档排序
             status = request.POST.get('status', 1)  # 文档状态
+
             if doc_id != '' and project != '' and doc_name != '' and project != '-1':
-                # 更新文档内容
-                Doc.objects.filter(id=int(doc_id)).update(
-                    name=doc_name,
-                    content=doc_content,
-                    pre_content=pre_content,
-                    parent_doc=int(parent_doc) if parent_doc != '' else 0,
-                    sort=sort if sort != '' else 99,
-                    modify_time=datetime.datetime.now(),
-                    status=status
-                )
-                return JsonResponse({'status': True, 'data': '修改成功'})
+                doc = Doc.objects.get(id=doc_id)
+                pro_colla = ProjectCollaborator.objects.filter(
+                    project=project, user=request.user)
+                # 验证用户有权限修改文档 - 文档的创建者或文集的高级协作者，v0.4版本新增
+                if (request.user == doc.create_user) or (pro_colla[0].role == 1):
+                    # 更新文档内容
+                    Doc.objects.filter(id=int(doc_id)).update(
+                        name=doc_name,
+                        content=doc_content,
+                        pre_content=pre_content,
+                        parent_doc=int(parent_doc) if parent_doc != '' else 0,
+                        sort=sort if sort != '' else 99,
+                        modify_time=datetime.datetime.now(),
+                        status=status
+                    )
+                    return JsonResponse({'status': True, 'data': '修改成功'})
+                else:
+                    return JsonResponse({'status': False, 'data': '未授权请求'})
             else:
                 return JsonResponse({'status': False, 'data': '参数错误'})
         except Exception as e:
@@ -496,8 +655,9 @@ def manage_doc(request):
             # 查询文档
             if doc_status == 'all':
                 doc_list = Doc.objects.filter(
+                    Q(content__icontains=search_kw) | Q(
+                        name__icontains=search_kw),  # 文本或文档标题包含搜索词
                     create_user=request.user,
-                    content__icontains=search_kw
                 ).order_by('-modify_time')
             elif doc_status == 'published':
                 doc_list = Doc.objects.filter(
@@ -507,12 +667,13 @@ def manage_doc(request):
                 ).order_by('-modify_time')
             elif doc_status == 'draft':
                 doc_list = Doc.objects.filter(
+                    Q(content__icontains=search_kw) | Q(
+                        name__icontains=search_kw),  # 文本或文档标题包含搜索词
                     create_user=request.user,
-                    content__icontains=search_kw,
                     status=0
                 ).order_by('-modify_time')
             # 分页处理
-            paginator = Paginator(doc_list, 10)
+            paginator = Paginator(doc_list, 15)
             page = request.GET.get('page', 1)
             try:
                 docs = paginator.page(page)
@@ -556,7 +717,7 @@ def manage_doc(request):
                 doc_list = Doc.objects.filter(
                     create_user=request.user).order_by('-modify_time')
             # 分页处理
-            paginator = Paginator(doc_list, 10)
+            paginator = Paginator(doc_list, 15)
             page = request.GET.get('page', 1)
             try:
                 docs = paginator.page(page)
@@ -574,6 +735,7 @@ def manage_doc(request):
 @login_required()
 def create_doctemp(request):
     if request.method == 'GET':
+        doctemps = DocTemp.objects.filter(create_user=request.user)
         return render(request, 'app_doc/create_doctemp.html', locals())
     elif request.method == 'POST':
         try:
@@ -604,13 +766,14 @@ def modify_doctemp(request, doctemp_id):
         try:
             doctemp = DocTemp.objects.get(id=doctemp_id)
             if request.user.id == doctemp.create_user.id:
+                doctemps = DocTemp.objects.filter(create_user=request.user)
                 return render(request, 'app_doc/modify_doctemp.html', locals())
             else:
                 return HttpResponse('非法请求')
         except Exception as e:
             if settings.DEBUG:
                 print(traceback.print_exc())
-            return HttpResponse('请求出错')
+            return render(request, '404.html')
     elif request.method == 'POST':
         try:
             doctemp_id = request.POST.get('doctemp_id', '')
@@ -663,7 +826,7 @@ def manage_doctemp(request):
             search_kw = request.GET.get('kw', None)
             if search_kw:
                 doctemp_list = DocTemp.objects.filter(
-                    create_user=request.user, content__icontains=search_kw)
+                    create_user=request.user, content__icontains=search_kw).order_by('-create_time')
                 paginator = Paginator(doctemp_list, 10)
                 page = request.GET.get('page', 1)
                 try:
@@ -674,7 +837,8 @@ def manage_doctemp(request):
                     doctemps = paginator.page(paginator.num_pages)
                 doctemps.kw = search_kw
             else:
-                doctemp_list = DocTemp.objects.filter(create_user=request.user)
+                doctemp_list = DocTemp.objects.filter(
+                    create_user=request.user).order_by('-create_time')
                 paginator = Paginator(doctemp_list, 10)
                 page = request.GET.get('page', 1)
                 try:
@@ -687,7 +851,7 @@ def manage_doctemp(request):
         except Exception as e:
             if settings.DEBUG:
                 print(traceback.print_exc())
-            return HttpResponse('请求出错')
+            return render(request, '404.html')
     else:
         return HttpResponse('方法不允许')
 
@@ -750,6 +914,60 @@ def get_pro_doc(request):
         return JsonResponse({'status': False, 'data': '方法错误'})
 
 
+# 获取指定文集的文档树数据
+@login_required()
+@require_http_methods(['POST'])
+def get_pro_doc_tree(request):
+    pro_id = request.POST.get('pro_id', None)
+    if pro_id:
+        # 获取一级文档
+        doc_list = []
+        top_docs = Doc.objects.filter(
+            top_doc=pro_id, parent_doc=0, status=1).order_by('sort')
+        for doc in top_docs:
+            top_item = {
+                'id': doc.id,
+                'field': doc.name,
+                'title': doc.name,
+                'spread': True,
+                'level': 1
+            }
+            # 获取二级文档
+            sec_docs = Doc.objects.filter(
+                top_doc=pro_id, parent_doc=doc.id, status=1).order_by('sort')
+            if sec_docs.exists():  # 二级文档
+                top_item['children'] = []
+                for doc in sec_docs:
+                    sec_item = {
+                        'id': doc.id,
+                        'field': doc.name,
+                        'title': doc.name,
+                        'level': 2
+                    }
+                    # 获取三级文档
+                    thr_docs = Doc.objects.filter(
+                        top_doc=pro_id, parent_doc=doc.id, status=1).order_by('sort')
+                    if thr_docs.exists():
+                        sec_item['children'] = []
+                        for doc in thr_docs:
+                            item = {
+                                'id': doc.id,
+                                'field': doc.name,
+                                'title': doc.name,
+                                'level': 3
+                            }
+                            sec_item['children'].append(item)
+                        top_item['children'].append(sec_item)
+                    else:
+                        top_item['children'].append(sec_item)
+                doc_list.append(top_item)
+            else:
+                doc_list.append(top_item)
+        return JsonResponse({'status': True, 'data': doc_list})
+    else:
+        return JsonResponse({'status': False, 'data': '参数错误'})
+
+
 # 404页面
 def handle_404(request):
     return render(request, '404.html')
@@ -780,6 +998,7 @@ def report_md(request):
 
     else:
         return Http404
+
 
 # 导出文集文件
 @allow_report_file
@@ -835,13 +1054,14 @@ def manage_image(request):
                 user=request.user, group_id=None).count()  # 获取所有未分组的图片数量
             g_id = int(request.GET.get('group', 0))  # 图片分组id
             if int(g_id) == 0:
-                image_list = Image.objects.filter(user=request.user)  # 查询所有图片
+                image_list = Image.objects.filter(
+                    user=request.user).order_by('-modify_time')  # 查询所有图片
             elif int(g_id) == -1:
                 image_list = Image.objects.filter(
-                    user=request.user, group_id=None)  # 查询指定分组的图片
+                    user=request.user, group_id=None).order_by('-modify_time')  # 查询指定分组的图片
             else:
                 image_list = Image.objects.filter(
-                    user=request.user, group_id=g_id)  # 查询指定分组的图片
+                    user=request.user, group_id=g_id).order_by('-modify_time')  # 查询指定分组的图片
             paginator = Paginator(image_list, 20)
             page = request.GET.get('page', 1)
             try:
@@ -910,6 +1130,7 @@ def manage_image(request):
             if settings.DEBUG:
                 print(traceback.print_exc())
             return JsonResponse({'status': False, 'data': '程序异常'})
+
 
 # 图片分组管理
 @login_required()
@@ -981,3 +1202,107 @@ def manage_img_group(request):
                 if settings.DEBUG:
                     print(traceback.print_exc())
                 return JsonResponse({'status': False, 'data': '出现错误'})
+
+
+# 附件管理
+@login_required()
+def manage_attachment(request):
+    # 文件大小 字节转换
+    def sizeFormat(size, is_disk=False, precision=2):
+        '''
+        size format for human.
+            byte      ---- (B)
+            kilobyte  ---- (KB)
+            megabyte  ---- (MB)
+            gigabyte  ---- (GB)
+            terabyte  ---- (TB)
+            petabyte  ---- (PB)
+            exabyte   ---- (EB)
+            zettabyte ---- (ZB)
+            yottabyte ---- (YB)
+        '''
+        formats = ['KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
+        unit = 1000.0 if is_disk else 1024.0
+        if not (isinstance(size, float) or isinstance(size, int)):
+            raise TypeError('a float number or an integer number is required!')
+        if size < 0:
+            raise ValueError('number must be non-negative')
+        for i in formats:
+            size /= unit
+            if size < unit:
+                r = '{}{}'.format(round(size, precision), i)
+                return r
+
+    if request.method == 'GET':
+        try:
+            search_kw = request.GET.get('kw', None)
+            if search_kw:
+                attachment_list = Attachment.objects.filter(
+                    user=request.user, file_name__icontains=search_kw).order_by('-create_time')
+                paginator = Paginator(attachment_list, 15)
+                page = request.GET.get('page', 1)
+                try:
+                    attachments = paginator.page(page)
+                except PageNotAnInteger:
+                    attachments = paginator.page(1)
+                except EmptyPage:
+                    attachments = paginator.page(paginator.num_pages)
+                attachments.kw = search_kw
+            else:
+                attachment_list = Attachment.objects.filter(
+                    user=request.user).order_by('-create_time')
+                paginator = Paginator(attachment_list, 15)
+                page = request.GET.get('page', 1)
+                try:
+                    attachments = paginator.page(page)
+                except PageNotAnInteger:
+                    attachments = paginator.page(1)
+                except EmptyPage:
+                    attachments = paginator.page(paginator.num_pages)
+            return render(request, 'app_doc/manage_attachment.html', locals())
+        except Exception as e:
+            if settings.DEBUG:
+                print(traceback.print_exc())
+            return render(request, '404.html')
+    elif request.method == 'POST':
+        # types参数，0表示上传、1表示删除、2表示获取附件列表
+        types = request.POST.get('types', '')
+        if types in ['0', 0]:
+            attachment = request.FILES.get('attachment_upload', None)
+            if attachment:
+                attachment_name = attachment.name
+                attachment_size = sizeFormat(attachment.size)
+                if attachment_name.endswith('.zip'):
+                    a = Attachment.objects.create(
+                        file_name=attachment_name,
+                        file_size=attachment_size,
+                        file_path=attachment,
+                        user=request.user
+                    )
+                    return JsonResponse({'status': True, 'data': {'name': attachment_name, 'url': a.file_path.name}})
+                else:
+                    return JsonResponse({'status': False, 'data': '不支持的格式'})
+            else:
+                return JsonResponse({'status': False, 'data': '无效文件'})
+        elif types in ['1', 1]:
+            attach_id = request.POST.get('attach_id', '')
+            attachment = Attachment.objects.filter(
+                id=attach_id, user=request.user)  # 查询附件
+            for a in attachment:  # 遍历附件
+                a.file_path.delete()  # 删除文件
+            attachment.delete()  # 删除数据库记录
+            return JsonResponse({'status': True, 'data': '删除成功'})
+        elif types in [2, '2']:
+            attachment_list = []
+            attachments = Attachment.objects.filter(user=request.user)
+            for a in attachments:
+                item = {
+                    'filename': a.file_name,
+                    'filesize': a.file_size,
+                    'filepath': a.file_path.name,
+                    'filetime': a.create_time
+                }
+                attachment_list.append(item)
+            return JsonResponse({'status': True, 'data': attachment_list})
+        else:
+            return JsonResponse({'status': False, 'data': '无效参数'})

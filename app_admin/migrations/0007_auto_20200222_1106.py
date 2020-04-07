@@ -13,6 +13,7 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='registercode',
             name='user_list',
-            field=models.CharField(blank=True, default='', max_length=500, null=True, verbose_name='使用此注册码的用户'),
+            field=models.CharField(
+                blank=True, default='', max_length=500, null=True, verbose_name='使用此注册码的用户'),
         ),
     ]

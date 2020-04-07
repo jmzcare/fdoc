@@ -1,9 +1,8 @@
 from django.contrib.auth.models import User
 from django.db import models
 
+
 # 文集模型
-
-
 class Project(models.Model):
     name = models.CharField(verbose_name="文档名称", max_length=50)
     intro = models.TextField(verbose_name="介绍")
@@ -29,25 +28,26 @@ class Project(models.Model):
                            "pro_id": self.pk}
                        )
 
-# # 文集协作模型
-# class ProjectCollaborator(models.Model):
-#     project = models.ForeignKey(Project,on_delete=models.CASCADE)
-#     user = models.ForeignKey(User,on_delete=models.CASCADE)
-#     # 用户的协作模式：0表示可新建文档可修改删除自己新建的文档，1表示可新建文档可修改删除所有文档
-#     role = models.IntegerField(choices=((0,0),(1,1)),default=0,verbose_name='协作模式')
-#     create_time = models.DateTimeField(auto_now=True,verbose_name='添加时间')
-#     modify_time = models.DateTimeField(auto_now_add=True,verbose_name='修改时间')
-#
-#     def __str__(self):
-#         return self.project
-#
-#     class Meta:
-#         verbose_name = '文集协作'
-#         verbose_name_plural = verbose_name
+
+# 文集协作模型
+class ProjectCollaborator(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)  # 文集
+    user = models.ForeignKey(User, on_delete=models.CASCADE)  # 用户
+    # 用户的协作模式：0表示可新建文档，可修改、删除自己新建的文档，1表示可新建文档，可删除自己创建的文档、可修改所有文档
+    role = models.IntegerField(
+        choices=((0, 0), (1, 1)), default=0, verbose_name='协作模式')
+    create_time = models.DateTimeField(auto_now=True, verbose_name='添加时间')
+    modify_time = models.DateTimeField(auto_now_add=True, verbose_name='修改时间')
+
+    def __str__(self):
+        return self.project
+
+    class Meta:
+        verbose_name = '文集协作'
+        verbose_name_plural = verbose_name
+
 
 # 文档模型
-
-
 class Doc(models.Model):
     name = models.CharField(verbose_name="文档标题", max_length=50)
     pre_content = models.TextField(verbose_name="编辑内容", null=True, blank=True)
@@ -78,9 +78,8 @@ class Doc(models.Model):
                            "doc_id": self.pk}
                        )
 
+
 # 文档模板模型
-
-
 class DocTemp(models.Model):
     name = models.CharField(verbose_name="模板名称", max_length=50)
     content = models.TextField(verbose_name="文档模板")
@@ -95,9 +94,8 @@ class DocTemp(models.Model):
         verbose_name = '文档模板'
         verbose_name_plural = verbose_name
 
+
 # 文集导出模型
-
-
 class ProjectReport(models.Model):
     project = models.OneToOneField(
         Project, unique=True, on_delete=models.CASCADE)
@@ -111,9 +109,8 @@ class ProjectReport(models.Model):
         verbose_name = '文集导出'
         verbose_name_plural = verbose_name
 
+
 # 图片分组模型
-
-
 class ImageGroup(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     group_name = models.CharField(
@@ -143,4 +140,23 @@ class Image(models.Model):
 
     class Meta:
         verbose_name = '素材图片'
+        verbose_name_plural = verbose_name
+
+
+# 附件模型
+class Attachment(models.Model):
+    file_name = models.CharField(
+        max_length=200, verbose_name="附件名", default='mrdoc_附件.zip')
+    file_size = models.CharField(
+        max_length=100, verbose_name="附件大小", blank=True, null=True)
+    file_path = models.FileField(
+        upload_to='attachment/%Y/%m/', verbose_name='附件')
+    user = models.ForeignKey(User, on_delete=models.CASCADE,)
+    create_time = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.file_name
+
+    class Meta:
+        verbose_name = '附件管理'
         verbose_name_plural = verbose_name

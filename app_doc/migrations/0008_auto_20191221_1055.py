@@ -17,12 +17,14 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='project',
             name='role_value',
-            field=models.TextField(blank=True, null=True, verbose_name='文集权限值'),
+            field=models.TextField(blank=True, null=True,
+                                   verbose_name='文集权限值'),
         ),
         migrations.AlterField(
             model_name='project',
             name='role',
-            field=models.IntegerField(choices=[(0, 0), (1, 1), (2, 2), (3, 3)], default=0, verbose_name='文集权限'),
+            field=models.IntegerField(
+                choices=[(0, 0), (1, 1), (2, 2), (3, 3)], default=0, verbose_name='文集权限'),
         ),
         migrations.DeleteModel(
             name='ProjectRole',

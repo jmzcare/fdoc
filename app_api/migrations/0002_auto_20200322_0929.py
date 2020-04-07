@@ -13,6 +13,7 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='usertoken',
             name='token',
-            field=models.CharField(max_length=250, unique=True, verbose_name='token值'),
+            field=models.CharField(
+                max_length=250, unique=True, verbose_name='token值'),
         ),
     ]
