@@ -26,7 +26,7 @@ SECRET_KEY = '5&71mt9@^58zdg*_!t(x6g14q*@84d%ptr%%s6e0l50zs0we3d'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-VERSIONS = '0.3.4'
+VERSIONS = '0.4'
 
 ALLOWED_HOSTS = ['*']
 
@@ -131,10 +131,6 @@ USE_TZ = False
 # https://docs.djangoproject.com/en/2.1/howto/static-files/
 
 STATIC_URL = '/static/'
-if DEBUG:
-    STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static'), ]
-else:
-    STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 
 # 媒体文件
 MEDIA_URL = '/media/'
@@ -145,3 +141,8 @@ try:
     from env import *
 except ImportError:
     pass
+
+if DEBUG:
+    STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static'), ]
+else:
+    STATIC_ROOT = os.path.join(BASE_DIR, 'static')
