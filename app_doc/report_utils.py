@@ -583,6 +583,8 @@ class ReportEPUB():
         return epub_file
 
 # 导出Docx
+
+
 class ReportDocx():
     def __init__(self, project_id):
         self.project = Project.objects.get(id=project_id)
@@ -595,18 +597,16 @@ class ReportDocx():
             xmlns="http://www.w3.org/TR/REC-html40">
             <head><meta http-equiv=Content-Type content="text/html; charset=utf-8">
             <style type="text/css">
-                table  
-                {  
+                table {
                     border-collapse: collapse;
-                    border: none;  
-                    width: 100%;  
-                }  
-                td,tr  
-                {  
+                    border: none;
+                    width: 100%;
+                }
+                td,tr {
                     border: solid #CCC 1px;
                     padding:3px;
                     font-size:9pt;
-                } 
+                }
                 .codestyle{
                     word-break: break-all;
                     mso-highlight:rgb(252, 252, 252);
@@ -624,7 +624,6 @@ class ReportDocx():
                   word-wrap: break-word;
                   white-space: -moz-pre-wrap;
                   white-space: -o-pre-wrap;
-                
                 }
                 /*块代码*/
                 pre code {

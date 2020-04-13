@@ -79,6 +79,22 @@ class Doc(models.Model):
                        )
 
 
+# 文档历史模型 (v0.4.1新增)
+class DocHistory(models.Model):
+    doc = models.ForeignKey(Doc, on_delete=models.CASCADE)
+    pre_content = models.TextField(
+        verbose_name='文档历史编辑内容', null=True, blank=True)
+    create_user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    create_time = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return self.doc
+
+    class Meta:
+        verbose_name = '文档历史'
+        verbose_name_plural = verbose_name
+
+
 # 文档模板模型
 class DocTemp(models.Model):
     name = models.CharField(verbose_name="模板名称", max_length=50)
@@ -124,8 +140,6 @@ class ImageGroup(models.Model):
         verbose_name_plural = verbose_name
 
 # 图片模型
-
-
 class Image(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     file_path = models.CharField(verbose_name="图片路径", max_length=250)
