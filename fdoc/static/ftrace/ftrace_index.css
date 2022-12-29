@@ -1,0 +1,6 @@
+.contact_action:{
+    display: none;
+}
+.contact:hover>>>.contact_action{
+        display:inline;
+    }

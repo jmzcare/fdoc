@@ -1,0 +1,258 @@
+{% extends 'ftrace_base.html' %} {% block head %} {% load static %}
+<!-- <link rel="stylesheet" type="text/css" href="{% static 'ftrace/ftrace_index.css' %}"> -->
+{% endblock head %} {% block content %} {% verbatim %}
+<div id="app">
+  <h1>QUATA</h1>
+  <ul v-for=" customer_nature in customer_natures ">
+    <div class="ftrace">
+      <h3>
+        {{ customer_nature.customer_nature_name }}
+        <!-- 新增按钮 -->
+        <span>
+          <button class="ftrace_action" @click="showAddSourceSector($event)">
+            新增客户板块
+          </button>
+        </span>
+        <!-- 新增按钮结束 -->
+      </h3>
+    </div>
+    <!-- 遍历货源板块 -->
+    <li v-for=" source_sector in fectorSort(customer_nature.source_sectors) ">
+      <div class="ftrace">
+        <h5>
+          {{ source_sector.source_sector_name }}
+          <!-- 新增按钮 -->
+          <span>
+            <div class="ftrace_action">
+              <button @click="showAddSource($event)">新增板块货源</button>
+            </div>
+          </span>
+          <!-- 新增按钮结束 -->
+        </h5>
+      </div>
+      <ul v-for=" source in source_sector.sources ">
+        <div class="ftrace">
+          {{ source.source_name }}
+          <!-- 新增按钮 -->
+          <span>
+            <div class="ftrace_action">
+              <button @click="showAddSourceShip($event)">新增货源客户</button>
+            </div>
+          </span>
+          <!-- 新增按钮结束 -->
+        </div>
+        <ul class="source" v-for=" sourceship in source.sourceships">
+          <div class="ftrace">
+            <span> {{ sourceship.customer.customer_name }}联系人:</span>
+            <!-- 新增按钮 -->
+            <span>
+              <div class="ftrace_action">
+                <button @click="showAddContact($event)">新增联系人</button>
+              </div>
+            </span>
+            <!-- 新增按钮结束 -->
+            <span v-for=" contact in sourceship.contacts">
+              {{ contact.contact_name }}
+            </span>
+            <span class="AddContact" style="color: red; display: none">
+              <div>联系人：<input type="text" class="contact_name" /></div>
+              <div>email:<input type="text" class="email" /></div>
+              <div>phone:<input type="text" class="phone" /></div>
+              <div>note：<input type="text" class="note" /></div>
+              <button @click="PostContactData(sourceship.url,$event)">
+                提交
+              </button>
+              <button @click="hideAddContact($event)">取消</button>
+            </span>
+          </div>
+          <ul v-for=" quota in sourceship.quatas">
+            日期：{{ quota.quota_date }} 指标：{{ quota.quota_num }} 完成：{{
+            quota.quota_finish }}
+          </ul>
+        </ul>
+        <!-- 新增货源客户 -->
+        <ul class="AddSourceShip" style="color: red; display: none">
+          新增货源客户
+          <input type="text" class="customer_name" />
+          <button
+            @click="PostSourceShipData(source.url,customer_nature.url,$event)"
+          >
+            提交
+          </button>
+          <button @click="hideAddSourceShip($event)">取消</button>
+        </ul>
+      </ul>
+      <!-- 新增板块货源 -->
+      <ul class="AddSource" style="color: red; display: none">
+        新增板块货源
+        <input type="text" class="source_name" />
+        <button @click="PostSourceData(source_sector.url, $event)">提交</button>
+        <button @click="hideAddSource($event)">取消</button>
+      </ul>
+    </li>
+
+    <ul class="AddSourceSector" style="color: red; display: none">
+      新增货源板块
+      <input type="text" class="source_sector_name" />
+      <button @click="PostSourceSectorData(customer_nature.url,$event)">
+        提交
+      </button>
+      <button @click="hideAddSourceSector($event)">取消</button>
+    </ul>
+  </ul>
+</div>
+
+{% endverbatim %}
+
+<script>
+  const API_URL = `http://localhost:8000/api/ftrace/customer_nature/`;
+  const API_URL_SOURCE_SECTOR = `http://localhost:8000/api/ftrace/source_sector/`;
+  const API_URL_SOURCE = `http://localhost:8000/api/ftrace/source/`;
+  const API_URL_SOURCESHIP = `http://localhost:8000/api/ftrace/sourceship/`;
+  const API_URL_SOURCESHIP_MODEL = `http://localhost:8000/api/ftrace/sourceshipModel/`;
+  const API_URL_CONTACT = `http://localhost:8000/api/ftrace/contact/`;
+  const API_URL_CUSTOMER = `http://localhost:8000/api/ftrace/customer/`;
+  Vue.createApp({
+    data: () => ({
+      customer_natures: null,
+    }),
+
+    created() {
+      // 在初始化的时候进行获取
+      this.fetchData();
+    },
+
+    watch: {},
+
+    methods: {
+      showAddSourceSector(e) {
+        e.currentTarget.parentElement.parentElement.parentElement.parentElement.querySelector(
+          ".AddSourceSector"
+        ).style.display = "inline";
+      },
+      hideAddSourceSector(e) {
+        e.currentTarget.parentElement.style.display = "none";
+      },
+      showAddSource(e) {
+        e.currentTarget.parentElement.parentElement.parentElement.parentElement.parentElement.querySelector(
+          ".AddSource"
+        ).style.display = "inline";
+      },
+      hideAddSource(e) {
+        e.currentTarget.parentElement.style.display = "none";
+      },
+      showAddSourceShip(e) {
+        e.currentTarget.parentElement.parentElement.parentElement.parentElement.parentElement.querySelector(
+          ".AddSourceShip"
+        ).style.display = "inline";
+      },
+      hideAddSourceShip(e) {
+        e.currentTarget.parentElement.style.display = "none";
+      },
+      showAddContact(e) {
+        e.currentTarget.parentElement.parentElement.parentElement.parentElement.parentElement.querySelector(
+          ".AddContact"
+        ).style.display = "inline";
+      },
+      hideAddContact(e) {
+        e.currentTarget.parentElement.style.display = "none";
+      },
+      async fetchData() {
+        const url = API_URL;
+        this.customer_natures = await (await fetch(url)).json();
+      },
+      async PostSourceSectorData(customer_nature_url, e) {
+        const url = API_URL_SOURCE_SECTOR;
+        const body = JSON.stringify({
+          source_sector_name: e.currentTarget.parentElement.querySelector(
+            ".source_sector_name"
+          ).value,
+          customer_nature: customer_nature_url,
+          source_sector_index: 90,
+        });
+        const headers = { "content-type": "application/json" };
+        await fetch(url, { method: "post", body: body, headers: headers });
+        this.fetchData();
+      },
+      async PostSourceData(source_sector_url, e) {
+        const url = API_URL_SOURCE;
+        console.log(e.currentTarget)
+        cancel_node = e.currentTarget.parentElement;
+        
+        const body = JSON.stringify({
+          source_name:
+            e.currentTarget.parentElement.querySelector(".source_name").value,
+          source_sector: source_sector_url,
+        });
+        const headers = { "content-type": "application/json" };
+        await fetch(url, { method: "post", body: body, headers: headers });
+        cancel_node.style.display = "none";
+        this.fetchData();
+      },
+      async PostSourceShipData(source_url, customer_nature_url, e) {
+        const url = API_URL_SOURCESHIP;
+        cancel_node = e.currentTarget.parentElement;
+        const headers = { "content-type": "application/json" };
+        customer_name =
+          e.currentTarget.parentElement.querySelector(".customer_name").value;
+        cr_url = API_URL_CUSTOMER + "?customer_name=" + customer_name;
+        console.log(customer_name);
+        console.log(cr_url);
+        customer_arr = await (await fetch(cr_url)).json();
+        
+        if (customer_arr.length>0) {
+            customer = customer_arr[0].url
+        }else{
+            const cr_body = JSON.stringify({
+                customer_name: customer_name,
+                customer_nature: customer_nature_url,
+                });
+            fetch(API_URL_CUSTOMER, { method: "post", body: cr_body, headers: headers }).then(
+            fetch(cr_url).then(res=>res.json()).then(customer = json.url)
+            );
+          };
+        const body = JSON.stringify({
+          customer: customer,
+          source: source_url,
+        });
+        
+        await fetch(url, { method: "post", body: body, headers: headers });
+        cancel_node.style.display = "none";
+        this.fetchData();
+      },
+      async PostContactData(sourceShip_url, e) {
+        const url = API_URL_CONTACT;
+        cancel_node = e.currentTarget.parentElement;
+        const body = JSON.stringify({
+          contact_name:
+            e.currentTarget.parentElement.querySelector(".contact_name").value,
+          email: e.currentTarget.parentElement.querySelector(".email").value,
+          phone: e.currentTarget.parentElement.querySelector(".phone").value,
+          note: e.currentTarget.parentElement.querySelector(".note").value,
+          sourceship: sourceShip_url,
+        });
+        const headers = { "content-type": "application/json" };
+        await fetch(url, { method: "post", body: body, headers: headers });
+        cancel_node.style.display = "none";
+        this.fetchData();
+      },
+      fectorSort(arr) {
+        arr = [...arr].sort(function (a, b) {
+          return a.source_sector_index - b.source_sector_index;
+        });
+        return arr;
+      },
+    },
+    computed: {},
+  }).mount("#app");
+</script>
+<style>
+  .ftrace_action {
+    display: none;
+  }
+
+  .ftrace:hover .ftrace_action {
+    display: inline;
+  }
+</style>
+{% endblock content %}
