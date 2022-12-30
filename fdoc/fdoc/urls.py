@@ -18,7 +18,8 @@ from django.urls import path, include
 
 
 from ftrace.urls import router as ftrace_router
-
+from django.conf.urls.static import static
+from django.conf import settings
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -27,4 +28,6 @@ urlpatterns = [
     
     
     path('ftrace/', include('ftrace.urls')),
+    path('fmark/', include('fmark.urls')),
+    path('mdeditor/', include('mdeditor.urls')),
 ]

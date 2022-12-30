@@ -105,13 +105,13 @@
 {% endverbatim %}
 
 <script>
-  const API_URL = `http://localhost:8000/api/ftrace/customer_nature/`;
-  const API_URL_SOURCE_SECTOR = `http://localhost:8000/api/ftrace/source_sector/`;
-  const API_URL_SOURCE = `http://localhost:8000/api/ftrace/source/`;
-  const API_URL_SOURCESHIP = `http://localhost:8000/api/ftrace/sourceship/`;
-  const API_URL_SOURCESHIP_MODEL = `http://localhost:8000/api/ftrace/sourceshipModel/`;
-  const API_URL_CONTACT = `http://localhost:8000/api/ftrace/contact/`;
-  const API_URL_CUSTOMER = `http://localhost:8000/api/ftrace/customer/`;
+  const API_URL = `/api/ftrace/customer_nature/`;
+  const API_URL_SOURCE_SECTOR = `/api/ftrace/source_sector/`;
+  const API_URL_SOURCE = `/api/ftrace/source/`;
+  const API_URL_SOURCESHIP = `/api/ftrace/sourceship/`;
+  const API_URL_SOURCESHIP_MODEL = `/api/ftrace/sourceshipModel/`;
+  const API_URL_CONTACT = `/api/ftrace/contact/`;
+  const API_URL_CUSTOMER = `/api/ftrace/customer/`;
   Vue.createApp({
     data: () => ({
       customer_natures: null,
@@ -150,7 +150,7 @@
         e.currentTarget.parentElement.style.display = "none";
       },
       showAddContact(e) {
-        e.currentTarget.parentElement.parentElement.parentElement.parentElement.parentElement.querySelector(
+        e.currentTarget.parentElement.parentElement.parentElement.parentElement.querySelector(
           ".AddContact"
         ).style.display = "inline";
       },

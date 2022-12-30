@@ -1,0 +1,35 @@
+{% extends 'ftrace_base.html' %} {% block head %} {% load static %}
+<!-- <link rel="stylesheet" type="text/css" href="{% static 'ftrace/ftrace_index.css' %}"> -->
+{% endblock head %} {% block content %} {% verbatim %}
+<div id="app">
+  <h1>FMark</h1>
+</div>
+
+{% endverbatim %}
+{{ post.body|safe }}
+<script>
+  const API_URL = `/api/ftrace/customer_nature/`;
+  Vue.createApp({
+    data: () => ({
+      customer_natures: null,
+    }),
+
+    created() {
+      // 在初始化的时候进行获取
+      this.fetchData();
+    },
+
+    watch: {},
+
+    methods: {
+    
+      async fetchData() {
+        const url = API_URL;
+        this.customer_natures = await (await fetch(url)).json();
+      },
+    
+    },
+    computed: {},
+  }).mount("#app");
+</script>
+{% endblock content %}
