@@ -9,7 +9,7 @@ app_name = 'fmark'
 
 
 # # Create a router and register our viewsets with it.
-# router = DefaultRouter()
+router = DefaultRouter()
 # router.register(r'customer', ftrace_api_v.CustomerViewSet)
 
 

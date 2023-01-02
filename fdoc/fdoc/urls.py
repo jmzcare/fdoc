@@ -18,12 +18,15 @@ from django.urls import path, include
 
 
 from ftrace.urls import router as ftrace_router
+from fmark.urls import router as fmark_router
 from django.conf.urls.static import static
 from django.conf import settings
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/ftrace/', include(ftrace_router.urls)),
+    path('api/fmark/', include(fmark_router.urls)),
+
     path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
     
     
